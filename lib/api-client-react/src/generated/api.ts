@@ -39,7 +39,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -899,7 +898,175 @@ export const useSimulateReading = <
 };
 
 /**
- * @summary Dashboard stats - total devices, active, avg temperature, etc.
+ * @summary Start fire simulation for a virtual device
+ */
+export const getStartFireUrl = (id: number) => {
+  return `/api/devices/${id}/fire/start`;
+};
+
+export const startFire = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Device> => {
+  return customFetch<Device>(getStartFireUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getStartFireMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startFire>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof startFire>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["startFire"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof startFire>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return startFire(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StartFireMutationResult = NonNullable<
+  Awaited<ReturnType<typeof startFire>>
+>;
+
+export type StartFireMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Start fire simulation for a virtual device
+ */
+export const useStartFire = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof startFire>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof startFire>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getStartFireMutationOptions(options));
+};
+
+/**
+ * @summary Stop fire simulation for a virtual device
+ */
+export const getStopFireUrl = (id: number) => {
+  return `/api/devices/${id}/fire/stop`;
+};
+
+export const stopFire = async (
+  id: number,
+  options?: RequestInit,
+): Promise<Device> => {
+  return customFetch<Device>(getStopFireUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getStopFireMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof stopFire>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof stopFire>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["stopFire"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof stopFire>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return stopFire(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StopFireMutationResult = NonNullable<
+  Awaited<ReturnType<typeof stopFire>>
+>;
+
+export type StopFireMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Stop fire simulation for a virtual device
+ */
+export const useStopFire = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof stopFire>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof stopFire>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getStopFireMutationOptions(options));
+};
+
+/**
+ * @summary Dashboard stats
  */
 export const getGetDashboardSummaryUrl = () => {
   return `/api/dashboard/summary`;
@@ -950,7 +1117,7 @@ export type GetDashboardSummaryQueryResult = NonNullable<
 export type GetDashboardSummaryQueryError = ErrorType<unknown>;
 
 /**
- * @summary Dashboard stats - total devices, active, avg temperature, etc.
+ * @summary Dashboard stats
  */
 
 export function useGetDashboardSummary<
@@ -974,7 +1141,7 @@ export function useGetDashboardSummary<
 }
 
 /**
- * @summary Get latest reading for every device (for map display)
+ * @summary Get latest reading for every device with at least one reading
  */
 export const getGetAllLatestReadingsUrl = () => {
   return `/api/readings/all`;
@@ -1025,7 +1192,7 @@ export type GetAllLatestReadingsQueryResult = NonNullable<
 export type GetAllLatestReadingsQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get latest reading for every device (for map display)
+ * @summary Get latest reading for every device with at least one reading
  */
 
 export function useGetAllLatestReadings<

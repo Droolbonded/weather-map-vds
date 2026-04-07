@@ -14,8 +14,9 @@ export interface Device {
   longitude: number;
   isVirtual: boolean;
   isActive: boolean;
-  /** Unique hardware ID or slug */
   deviceId: string;
+  fireMode: boolean;
+  fireModeStartedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

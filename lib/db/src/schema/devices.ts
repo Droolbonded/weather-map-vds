@@ -11,6 +11,8 @@ export const devicesTable = pgTable("devices", {
   isVirtual: boolean("is_virtual").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   deviceId: text("device_id").notNull().unique(),
+  fireMode: boolean("fire_mode").notNull().default(false),
+  fireModeStartedAt: timestamp("fire_mode_started_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

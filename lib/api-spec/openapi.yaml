@@ -20,7 +20,6 @@ paths:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -215,11 +214,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/SensorReading"
 
+  /devices/{id}/fire/start:
+    post:
+      operationId: startFire
+      tags: [devices]
+      summary: Start fire simulation for a virtual device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Fire started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /devices/{id}/fire/stop:
+    post:
+      operationId: stopFire
+      tags: [devices]
+      summary: Stop fire simulation for a virtual device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Fire stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
       tags: [devices]
-      summary: Dashboard stats - total devices, active, avg temperature, etc.
+      summary: Dashboard stats
       responses:
         "200":
           description: Summary statistics
@@ -232,10 +281,10 @@ paths:
     get:
       operationId: getAllLatestReadings
       tags: [readings]
-      summary: Get latest reading for every device (for map display)
+      summary: Get latest reading for every device with at least one reading
       responses:
         "200":
-          description: Latest readings for all devices
+          description: Latest readings for devices that have data
           content:
             application/json:
               schema:
@@ -275,7 +324,12 @@ components:
           type: boolean
         deviceId:
           type: string
-          description: Unique hardware ID or slug
+        fireMode:
+          type: boolean
+        fireModeStartedAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -290,6 +344,7 @@ components:
         - isVirtual
         - isActive
         - deviceId
+        - fireMode
         - createdAt
         - updatedAt
 
@@ -345,30 +400,24 @@ components:
         temperature:
           type: number
           format: double
-          description: Celsius
         humidity:
           type: number
           format: double
-          description: Percentage 0-100
         pressure:
           type: number
           format: double
-          description: hPa
         heatIndex:
           type: number
           format: double
           nullable: true
-          description: Feels like temperature
         windSpeed:
           type: number
           format: double
           nullable: true
-          description: km/h
         windDirection:
           type: number
           format: double
           nullable: true
-          description: Degrees 0-360
         uvIndex:
           type: number
           format: double
@@ -376,7 +425,6 @@ components:
         weatherCondition:
           type: string
           nullable: true
-          description: Sunny, Cloudy, Rainy, etc.
         recordedAt:
           type: string
           format: date-time
@@ -444,6 +492,8 @@ components:
           type: integer
         virtualDevices:
           type: integer
+        fireDevices:
+          type: integer
         avgTemperature:
           type: number
           format: double
@@ -464,6 +514,7 @@ components:
         - totalDevices
         - activeDevices
         - virtualDevices
+        - fireDevices
 
     ErrorResponse:
       type: object

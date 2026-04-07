@@ -8,7 +8,6 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -26,7 +25,9 @@ export const ListDevicesResponseItem = zod.object({
   longitude: zod.number(),
   isVirtual: zod.boolean(),
   isActive: zod.boolean(),
-  deviceId: zod.string().describe("Unique hardware ID or slug"),
+  deviceId: zod.string(),
+  fireMode: zod.boolean(),
+  fireModeStartedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -59,7 +60,9 @@ export const GetDeviceResponse = zod.object({
   longitude: zod.number(),
   isVirtual: zod.boolean(),
   isActive: zod.boolean(),
-  deviceId: zod.string().describe("Unique hardware ID or slug"),
+  deviceId: zod.string(),
+  fireMode: zod.boolean(),
+  fireModeStartedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -87,7 +90,9 @@ export const UpdateDeviceResponse = zod.object({
   longitude: zod.number(),
   isVirtual: zod.boolean(),
   isActive: zod.boolean(),
-  deviceId: zod.string().describe("Unique hardware ID or slug"),
+  deviceId: zod.string(),
+  fireMode: zod.boolean(),
+  fireModeStartedAt: zod.coerce.date().nullish(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -115,17 +120,14 @@ export const GetDeviceReadingsQueryParams = zod.object({
 export const GetDeviceReadingsResponseItem = zod.object({
   id: zod.number(),
   deviceId: zod.number(),
-  temperature: zod.number().describe("Celsius"),
-  humidity: zod.number().describe("Percentage 0-100"),
-  pressure: zod.number().describe("hPa"),
-  heatIndex: zod.number().nullish().describe("Feels like temperature"),
-  windSpeed: zod.number().nullish().describe("km\/h"),
-  windDirection: zod.number().nullish().describe("Degrees 0-360"),
+  temperature: zod.number(),
+  humidity: zod.number(),
+  pressure: zod.number(),
+  heatIndex: zod.number().nullish(),
+  windSpeed: zod.number().nullish(),
+  windDirection: zod.number().nullish(),
   uvIndex: zod.number().nullish(),
-  weatherCondition: zod
-    .string()
-    .nullish()
-    .describe("Sunny, Cloudy, Rainy, etc."),
+  weatherCondition: zod.string().nullish(),
   recordedAt: zod.coerce.date(),
 });
 export const GetDeviceReadingsResponse = zod.array(
@@ -160,17 +162,14 @@ export const GetDeviceLatestReadingParams = zod.object({
 export const GetDeviceLatestReadingResponse = zod.object({
   id: zod.number(),
   deviceId: zod.number(),
-  temperature: zod.number().describe("Celsius"),
-  humidity: zod.number().describe("Percentage 0-100"),
-  pressure: zod.number().describe("hPa"),
-  heatIndex: zod.number().nullish().describe("Feels like temperature"),
-  windSpeed: zod.number().nullish().describe("km\/h"),
-  windDirection: zod.number().nullish().describe("Degrees 0-360"),
+  temperature: zod.number(),
+  humidity: zod.number(),
+  pressure: zod.number(),
+  heatIndex: zod.number().nullish(),
+  windSpeed: zod.number().nullish(),
+  windDirection: zod.number().nullish(),
   uvIndex: zod.number().nullish(),
-  weatherCondition: zod
-    .string()
-    .nullish()
-    .describe("Sunny, Cloudy, Rainy, etc."),
+  weatherCondition: zod.string().nullish(),
   recordedAt: zod.coerce.date(),
 });
 
@@ -182,12 +181,57 @@ export const SimulateReadingParams = zod.object({
 });
 
 /**
- * @summary Dashboard stats - total devices, active, avg temperature, etc.
+ * @summary Start fire simulation for a virtual device
+ */
+export const StartFireParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const StartFireResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  latitude: zod.number(),
+  longitude: zod.number(),
+  isVirtual: zod.boolean(),
+  isActive: zod.boolean(),
+  deviceId: zod.string(),
+  fireMode: zod.boolean(),
+  fireModeStartedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Stop fire simulation for a virtual device
+ */
+export const StopFireParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const StopFireResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  description: zod.string().nullish(),
+  latitude: zod.number(),
+  longitude: zod.number(),
+  isVirtual: zod.boolean(),
+  isActive: zod.boolean(),
+  deviceId: zod.string(),
+  fireMode: zod.boolean(),
+  fireModeStartedAt: zod.coerce.date().nullish(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Dashboard stats
  */
 export const GetDashboardSummaryResponse = zod.object({
   totalDevices: zod.number(),
   activeDevices: zod.number(),
   virtualDevices: zod.number(),
+  fireDevices: zod.number(),
   avgTemperature: zod.number().nullish(),
   avgHumidity: zod.number().nullish(),
   avgPressure: zod.number().nullish(),
@@ -195,7 +239,7 @@ export const GetDashboardSummaryResponse = zod.object({
 });
 
 /**
- * @summary Get latest reading for every device (for map display)
+ * @summary Get latest reading for every device with at least one reading
  */
 export const GetAllLatestReadingsResponseItem = zod.object({
   device: zod.object({
@@ -206,7 +250,9 @@ export const GetAllLatestReadingsResponseItem = zod.object({
     longitude: zod.number(),
     isVirtual: zod.boolean(),
     isActive: zod.boolean(),
-    deviceId: zod.string().describe("Unique hardware ID or slug"),
+    deviceId: zod.string(),
+    fireMode: zod.boolean(),
+    fireModeStartedAt: zod.coerce.date().nullish(),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),
@@ -214,17 +260,14 @@ export const GetAllLatestReadingsResponseItem = zod.object({
     .object({
       id: zod.number(),
       deviceId: zod.number(),
-      temperature: zod.number().describe("Celsius"),
-      humidity: zod.number().describe("Percentage 0-100"),
-      pressure: zod.number().describe("hPa"),
-      heatIndex: zod.number().nullish().describe("Feels like temperature"),
-      windSpeed: zod.number().nullish().describe("km\/h"),
-      windDirection: zod.number().nullish().describe("Degrees 0-360"),
+      temperature: zod.number(),
+      humidity: zod.number(),
+      pressure: zod.number(),
+      heatIndex: zod.number().nullish(),
+      windSpeed: zod.number().nullish(),
+      windDirection: zod.number().nullish(),
       uvIndex: zod.number().nullish(),
-      weatherCondition: zod
-        .string()
-        .nullish()
-        .describe("Sunny, Cloudy, Rainy, etc."),
+      weatherCondition: zod.string().nullish(),
       recordedAt: zod.coerce.date(),
     })
     .nullish(),

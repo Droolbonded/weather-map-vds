@@ -10,6 +10,7 @@ export interface DashboardSummary {
   totalDevices: number;
   activeDevices: number;
   virtualDevices: number;
+  fireDevices: number;
   avgTemperature?: number | null;
   avgHumidity?: number | null;
   avgPressure?: number | null;
