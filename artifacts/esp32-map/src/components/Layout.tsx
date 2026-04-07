@@ -1,9 +1,10 @@
 import { Link, useLocation } from "wouter";
-import { Map, Cpu, Activity } from "lucide-react";
+import { Map, Cpu, Activity, BookOpen } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Harita", icon: Map },
   { href: "/devices", label: "Cihazlar", icon: Cpu },
+  { href: "/esp32-guide", label: "ESP32 Rehber", icon: BookOpen },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -22,7 +23,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           return (
             <Link key={href} href={href}>
               <div
-                data-testid={`nav-${label.toLowerCase()}`}
+                data-testid={`nav-${label.toLowerCase().replace(/\s+/g, "-")}`}
                 title={label}
                 className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer group relative ${
                   isActive

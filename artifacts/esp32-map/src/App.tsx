@@ -7,13 +7,14 @@ import Layout from "@/components/Layout";
 import MapPage from "@/pages/MapPage";
 import DevicesPage from "@/pages/DevicesPage";
 import DeviceDetailPage from "@/pages/DeviceDetailPage";
+import Esp32GuidePage from "@/pages/Esp32GuidePage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
-      staleTime: 30000,
+      staleTime: 15000,
     },
   },
 });
@@ -25,6 +26,7 @@ function Router() {
         <Route path="/" component={MapPage} />
         <Route path="/devices" component={DevicesPage} />
         <Route path="/devices/:id" component={DeviceDetailPage} />
+        <Route path="/esp32-guide" component={Esp32GuidePage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

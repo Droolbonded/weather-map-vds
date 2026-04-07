@@ -17,8 +17,9 @@ export interface Device {
   longitude: number;
   isVirtual: boolean;
   isActive: boolean;
-  /** Unique hardware ID or slug */
   deviceId: string;
+  fireMode: boolean;
+  fireModeStartedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,20 +44,13 @@ export interface UpdateDeviceBody {
 export interface SensorReading {
   id: number;
   deviceId: number;
-  /** Celsius */
   temperature: number;
-  /** Percentage 0-100 */
   humidity: number;
-  /** hPa */
   pressure: number;
-  /** Feels like temperature */
   heatIndex?: number | null;
-  /** km/h */
   windSpeed?: number | null;
-  /** Degrees 0-360 */
   windDirection?: number | null;
   uvIndex?: number | null;
-  /** Sunny, Cloudy, Rainy, etc. */
   weatherCondition?: string | null;
   recordedAt: string;
 }
@@ -81,6 +75,7 @@ export interface DashboardSummary {
   totalDevices: number;
   activeDevices: number;
   virtualDevices: number;
+  fireDevices: number;
   avgTemperature?: number | null;
   avgHumidity?: number | null;
   avgPressure?: number | null;

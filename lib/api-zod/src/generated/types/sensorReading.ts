@@ -9,20 +9,13 @@
 export interface SensorReading {
   id: number;
   deviceId: number;
-  /** Celsius */
   temperature: number;
-  /** Percentage 0-100 */
   humidity: number;
-  /** hPa */
   pressure: number;
-  /** Feels like temperature */
   heatIndex?: number | null;
-  /** km/h */
   windSpeed?: number | null;
-  /** Degrees 0-360 */
   windDirection?: number | null;
   uvIndex?: number | null;
-  /** Sunny, Cloudy, Rainy, etc. */
   weatherCondition?: string | null;
   recordedAt: Date;
 }
