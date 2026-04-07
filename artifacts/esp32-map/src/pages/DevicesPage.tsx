@@ -8,12 +8,10 @@ import {
   useDeleteDevice,
   useUpdateDevice,
   useSimulateReading,
-  useStartFire,
-  useStopFire,
 } from "@workspace/api-client-react";
 import {
   Cpu, Wifi, WifiOff, Trash2, Activity, ChevronRight,
-  MapPin, Edit2, Check, X, Flame, ShieldOff, AlertTriangle,
+  MapPin, Edit2, Check, X, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,8 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 type Device = {
   id: number; name: string; description?: string | null;
   latitude: number; longitude: number; isVirtual: boolean;
-  isActive: boolean; deviceId: string; fireMode: boolean;
-  fireModeStartedAt?: string | null; createdAt: string; updatedAt: string;
+  isActive: boolean; deviceId: string; createdAt: string; updatedAt: string;
 };
 
 export default function DevicesPage() {
@@ -33,12 +30,9 @@ export default function DevicesPage() {
   const deleteDevice = useDeleteDevice();
   const updateDevice = useUpdateDevice();
   const simulateReading = useSimulateReading();
-  const startFire = useStartFire();
-  const stopFire = useStopFire();
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
-  // Inline delete confirmation (replaces window.confirm which is blocked in iframes)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
   const invalidateDevices = () => queryClient.invalidateQueries({ queryKey: getListDevicesQueryKey() });
@@ -74,26 +68,6 @@ export default function DevicesPage() {
     });
   };
 
-  const handleStartFire = (device: Device) => {
-    startFire.mutate({ id: device.id }, {
-      onSuccess: () => {
-        toast({ title: "YANGIN BASLADI", description: `${device.name} — sicaklik yukseliyor!`, variant: "destructive" });
-        invalidateDevices();
-      },
-      onError: () => toast({ title: "Hata", description: "Yangin baslatılamadı", variant: "destructive" }),
-    });
-  };
-
-  const handleStopFire = (device: Device) => {
-    stopFire.mutate({ id: device.id }, {
-      onSuccess: () => {
-        toast({ title: "Yangin sonduruldu", description: `${device.name} normale donuyor.` });
-        invalidateDevices();
-      },
-      onError: () => toast({ title: "Hata", description: "Yangin sondurulemedi", variant: "destructive" }),
-    });
-  };
-
   const handleStartEdit = (device: Device) => { setEditingId(device.id); setEditName(device.name); };
 
   const handleSaveEdit = (device: Device) => {
@@ -107,7 +81,6 @@ export default function DevicesPage() {
   const total = (devices as Device[]).length;
   const active = (devices as Device[]).filter((d) => d.isActive).length;
   const virtual = (devices as Device[]).filter((d) => d.isVirtual).length;
-  const onFire = (devices as Device[]).filter((d) => d.fireMode).length;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -115,13 +88,8 @@ export default function DevicesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold">Cihaz Listesi</h1>
-            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
-              <span>Toplam {total} cihaz — {active} aktif, {virtual} sanal</span>
-              {onFire > 0 && (
-                <span className="flex items-center gap-1 text-red-400 animate-pulse font-medium">
-                  <Flame className="w-3 h-3" /> {onFire} Yangin
-                </span>
-              )}
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Toplam {total} cihaz — {active} aktif, {virtual} sanal
             </p>
           </div>
           <Link href="/">
@@ -155,7 +123,6 @@ export default function DevicesPage() {
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ delay: i * 0.04 }}
                 >
-                  {/* Delete confirmation inline */}
                   {confirmDeleteId === device.id ? (
                     <div className="border border-destructive/50 bg-destructive/10 rounded-lg px-4 py-3 flex items-center gap-3">
                       <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0" />
@@ -163,20 +130,15 @@ export default function DevicesPage() {
                         <strong>"{device.name}"</strong> silinsin mi?
                       </span>
                       <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 px-3 text-xs gap-1"
-                        onClick={() => handleDelete(device)}
-                        disabled={deleteDevice.isPending}
+                        size="sm" variant="destructive" className="h-7 px-3 text-xs gap-1"
+                        onClick={() => handleDelete(device)} disabled={deleteDevice.isPending}
                         data-testid={`button-confirm-delete-${device.id}`}
                       >
                         <Trash2 className="w-3 h-3" />
                         {deleteDevice.isPending ? "Siliniyor..." : "Evet, Sil"}
                       </Button>
                       <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-3 text-xs"
+                        size="sm" variant="outline" className="h-7 px-3 text-xs"
                         onClick={() => setConfirmDeleteId(null)}
                         data-testid={`button-cancel-delete-${device.id}`}
                       >
@@ -184,21 +146,11 @@ export default function DevicesPage() {
                       </Button>
                     </div>
                   ) : (
-                    <div className={`border rounded-lg px-4 py-3 flex items-center gap-4 group transition-colors ${
-                      device.fireMode
-                        ? "bg-red-950/40 border-red-900/60 hover:border-red-700/60"
-                        : "bg-card border-border hover:border-primary/30"
-                    }`}>
-                      {/* Icon */}
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        device.fireMode ? "bg-red-500/20 text-red-400"
-                          : device.isActive ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}>
-                        {device.fireMode ? <Flame className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
+                    <div className="border border-border bg-card hover:border-primary/30 rounded-lg px-4 py-3 flex items-center gap-4 group transition-colors">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${device.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
+                        <Cpu className="w-4 h-4" />
                       </div>
 
-                      {/* Name + meta */}
                       <div className="flex-1 min-w-0">
                         {editingId === device.id ? (
                           <div className="flex items-center gap-2">
@@ -222,15 +174,9 @@ export default function DevicesPage() {
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <span className={`text-sm font-medium truncate ${device.fireMode ? "text-red-300" : ""}`}
-                              data-testid={`text-device-name-${device.id}`}>
+                            <span className="text-sm font-medium truncate" data-testid={`text-device-name-${device.id}`}>
                               {device.name}
                             </span>
-                            {device.fireMode && (
-                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
-                                YANGIN
-                              </span>
-                            )}
                             <button
                               data-testid={`button-edit-${device.id}`}
                               onClick={() => handleStartEdit(device)}
@@ -254,7 +200,6 @@ export default function DevicesPage() {
                         </div>
                       </div>
 
-                      {/* Status */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {device.isActive
                           ? <Wifi className="w-3.5 h-3.5 text-primary" />
@@ -264,7 +209,6 @@ export default function DevicesPage() {
                         </span>
                       </div>
 
-                      {/* Actions */}
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <Button
                           data-testid={`button-toggle-active-${device.id}`}
@@ -275,39 +219,14 @@ export default function DevicesPage() {
                         </Button>
 
                         {device.isVirtual && (
-                          <>
-                            {!device.fireMode ? (
-                              <>
-                                <Button
-                                  data-testid={`button-simulate-${device.id}`}
-                                  size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1"
-                                  onClick={() => handleSimulate(device)}
-                                  disabled={simulateReading.isPending}
-                                >
-                                  <Activity className="w-3 h-3" /> Veri Uret
-                                </Button>
-                                <Button
-                                  data-testid={`button-start-fire-${device.id}`}
-                                  size="sm" variant="ghost"
-                                  className="h-7 px-2 text-xs gap-1 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                  onClick={() => handleStartFire(device)}
-                                  disabled={startFire.isPending}
-                                >
-                                  <Flame className="w-3 h-3" /> Yangin
-                                </Button>
-                              </>
-                            ) : (
-                              <Button
-                                data-testid={`button-stop-fire-${device.id}`}
-                                size="sm" variant="ghost"
-                                className="h-7 px-2 text-xs gap-1 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                onClick={() => handleStopFire(device)}
-                                disabled={stopFire.isPending}
-                              >
-                                <ShieldOff className="w-3 h-3" /> Sondur
-                              </Button>
-                            )}
-                          </>
+                          <Button
+                            data-testid={`button-simulate-${device.id}`}
+                            size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1"
+                            onClick={() => handleSimulate(device)}
+                            disabled={simulateReading.isPending}
+                          >
+                            <Activity className="w-3 h-3" /> Veri Uret
+                          </Button>
                         )}
 
                         <Link href={`/devices/${device.id}`}>
