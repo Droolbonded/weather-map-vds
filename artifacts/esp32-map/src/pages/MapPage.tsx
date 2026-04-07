@@ -10,6 +10,7 @@ import {
   getGetDashboardSummaryQueryKey,
   useCreateDevice,
   useSimulateReading,
+  useGetDeviceLatestReading,
 } from "@workspace/api-client-react";
 import {
   X, Plus, Cpu, Activity, Thermometer, Droplets, Gauge, MapPin, Wifi, WifiOff, Flame,
@@ -306,101 +307,13 @@ export default function MapPage() {
 
       {/* Side panel */}
       {selectedDevice && createPortal(
-        <div
-          className={`fixed top-0 right-0 h-full w-80 bg-card/95 backdrop-blur-md border-l border-border z-[9999] overflow-y-auto shadow-2xl transition-transform duration-300 ease-in-out ${panelVisible ? "translate-x-0" : "translate-x-full"}`}
-          data-testid="panel-device-detail"
-        >
-          <div className="p-4 space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${selectedDevice.device.isActive ? "bg-primary" : "bg-muted-foreground"}`} />
-                  <span className="text-[11px] text-muted-foreground font-mono">
-                    {selectedDevice.device.isVirtual ? "SANAL" : "GERCEK"} ESP32
-                  </span>
-                  {selectedDevice.device.isActive
-                    ? <Wifi className="w-3 h-3 text-primary" />
-                    : <WifiOff className="w-3 h-3 text-muted-foreground" />}
-                  {selectedDevice.device.fireMode && (
-                    <span className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
-                      <Flame className="w-3 h-3" /> YANGIN
-                    </span>
-                  )}
-                </div>
-                <h2 className={`font-semibold text-sm truncate ${selectedDevice.device.fireMode ? "text-red-300" : ""}`} data-testid="text-device-name">
-                  {selectedDevice.device.name}
-                </h2>
-                {selectedDevice.device.description && (
-                  <p className="text-xs text-muted-foreground mt-0.5">{selectedDevice.device.description}</p>
-                )}
-              </div>
-              <button
-                data-testid="button-close-panel"
-                onClick={handleClosePanel}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {selectedDevice.device.fireMode && selectedDevice.device.fireModeStartedAt && (
-              <div className="bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2 text-xs text-red-300">
-                Yangin basladi: {new Date(selectedDevice.device.fireModeStartedAt).toLocaleString("tr-TR")}
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground bg-background/30 rounded-md px-3 py-2">
-              <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
-              <span>{selectedDevice.device.latitude.toFixed(5)}, {selectedDevice.device.longitude.toFixed(5)}</span>
-            </div>
-
-            <div>
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Son Olcum</div>
-              {selectedDevice.latestReading ? (
-                <>
-                  <div className="text-[11px] text-muted-foreground mb-2 font-mono">
-                    {new Date(selectedDevice.latestReading.recordedAt).toLocaleString("tr-TR")}
-                  </div>
-                  <WeatherCard
-                    temperature={selectedDevice.latestReading.temperature}
-                    humidity={selectedDevice.latestReading.humidity}
-                    pressure={selectedDevice.latestReading.pressure}
-                    heatIndex={selectedDevice.latestReading.heatIndex}
-                    windSpeed={selectedDevice.latestReading.windSpeed}
-                    windDirection={selectedDevice.latestReading.windDirection}
-                    uvIndex={selectedDevice.latestReading.uvIndex}
-                    weatherCondition={selectedDevice.latestReading.weatherCondition}
-                  />
-                </>
-              ) : (
-                <div className="text-sm text-muted-foreground bg-background/30 rounded-lg px-3 py-4 text-center">
-                  Henuz olcum yok
-                </div>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2 pt-1">
-              {selectedDevice.device.isVirtual && !selectedDevice.device.fireMode && (
-                <Button
-                  data-testid="button-simulate"
-                  size="sm"
-                  variant="outline"
-                  className="w-full text-xs gap-1.5"
-                  onClick={() => handleSimulate(selectedDevice.device.id)}
-                  disabled={simulateReading.isPending}
-                >
-                  <Activity className="w-3.5 h-3.5" />
-                  {simulateReading.isPending ? "Uretiliyor..." : "Veri Uret"}
-                </Button>
-              )}
-              <Link href={`/devices/${selectedDevice.device.id}`} className="w-full">
-                <Button size="sm" className="w-full text-xs" variant="outline" data-testid="button-view-detail">
-                  Detay Sayfasi
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>,
+        <LiveDevicePanel
+          device={selectedDevice.device}
+          visible={panelVisible}
+          onClose={handleClosePanel}
+          onSimulate={handleSimulate}
+          simulatePending={simulateReading.isPending}
+        />,
         document.body
       )}
 
@@ -454,6 +367,171 @@ export default function MapPage() {
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full border-2 border-solid border-red-500 bg-red-900/60" />
           Yangin
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type LiveDevicePanelProps = {
+  device: DeviceWithReading["device"];
+  visible: boolean;
+  onClose: () => void;
+  onSimulate: (id: number) => void;
+  simulatePending: boolean;
+};
+
+function LiveDevicePanel({ device, visible, onClose, onSimulate, simulatePending }: LiveDevicePanelProps) {
+  const pollMs = device.fireMode ? 3000 : 10000;
+
+  const { data: liveReading, dataUpdatedAt } = useGetDeviceLatestReading(device.id, {
+    query: { refetchInterval: pollMs, staleTime: 0 },
+  });
+
+  const reading = liveReading ?? null;
+  const isOnFire = device.fireMode;
+
+  return (
+    <div
+      className={`fixed top-0 right-0 h-full w-80 bg-card/95 backdrop-blur-md border-l z-[9999] overflow-y-auto shadow-2xl transition-transform duration-300 ease-in-out ${
+        visible ? "translate-x-0" : "translate-x-full"
+      } ${isOnFire ? "border-red-800/60" : "border-border"}`}
+      data-testid="panel-device-detail"
+    >
+      <div className="p-4 space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${device.isActive ? "bg-primary" : "bg-muted-foreground"}`} />
+              <span className="text-[11px] text-muted-foreground font-mono">
+                {device.isVirtual ? "SANAL" : "GERCEK"} ESP32
+              </span>
+              {device.isActive
+                ? <Wifi className="w-3 h-3 text-primary" />
+                : <WifiOff className="w-3 h-3 text-muted-foreground" />}
+              {isOnFire && (
+                <span className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+                  <Flame className="w-3 h-3" /> YANGIN
+                </span>
+              )}
+            </div>
+            <h2 className={`font-semibold text-sm truncate ${isOnFire ? "text-red-300" : ""}`} data-testid="text-device-name">
+              {device.name}
+            </h2>
+            {device.description && (
+              <p className="text-xs text-muted-foreground mt-0.5">{device.description}</p>
+            )}
+          </div>
+          <button
+            data-testid="button-close-panel"
+            onClick={onClose}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Fire alert banner */}
+        {isOnFire && device.fireModeStartedAt && (
+          <div className="bg-red-950/50 border border-red-700/40 rounded-lg px-3 py-2.5 space-y-1">
+            <div className="flex items-center gap-2">
+              <Flame className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+              <span className="text-xs font-semibold text-red-300">Aktif Yangin Algi</span>
+            </div>
+            <p className="text-[11px] text-red-400/70 font-mono">
+              Baslangic: {new Date(device.fireModeStartedAt).toLocaleString("tr-TR")}
+            </p>
+          </div>
+        )}
+
+        {/* Coordinates */}
+        <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground bg-background/30 rounded-md px-3 py-2">
+          <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
+          <span>{device.latitude.toFixed(5)}, {device.longitude.toFixed(5)}</span>
+        </div>
+
+        {/* Live reading section */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Canli Veri</div>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isOnFire ? "bg-red-400" : "bg-primary"}`} />
+              <span className={`text-[10px] font-mono ${isOnFire ? "text-red-400" : "text-primary"}`}>
+                CANLI · {isOnFire ? "3s" : "10s"}
+              </span>
+            </div>
+          </div>
+
+          {reading ? (
+            <>
+              <div className="text-[11px] text-muted-foreground mb-2 font-mono">
+                {new Date(reading.recordedAt).toLocaleString("tr-TR")}
+              </div>
+              <WeatherCard
+                temperature={reading.temperature}
+                humidity={reading.humidity}
+                pressure={reading.pressure}
+                heatIndex={reading.heatIndex}
+                windSpeed={reading.windSpeed}
+                windDirection={reading.windDirection}
+                uvIndex={reading.uvIndex}
+                weatherCondition={reading.weatherCondition}
+              />
+              {/* Fire sensor readings summary */}
+              {isOnFire && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div className="bg-red-950/30 border border-red-800/30 rounded-lg px-3 py-2 text-center">
+                    <div className="text-[10px] text-red-400/70 mb-0.5">Sicaklik</div>
+                    <div className="text-sm font-mono font-bold text-red-300">{reading.temperature.toFixed(1)}°C</div>
+                  </div>
+                  <div className="bg-blue-950/20 border border-blue-800/20 rounded-lg px-3 py-2 text-center">
+                    <div className="text-[10px] text-blue-400/70 mb-0.5">Nem</div>
+                    <div className="text-sm font-mono font-bold text-blue-300">%{reading.humidity.toFixed(0)}</div>
+                  </div>
+                  <div className="bg-orange-950/20 border border-orange-800/20 rounded-lg px-3 py-2 text-center">
+                    <div className="text-[10px] text-orange-400/70 mb-0.5">Ruzgar</div>
+                    <div className="text-sm font-mono font-bold text-orange-300">{reading.windSpeed?.toFixed(0) ?? "--"} km/s</div>
+                  </div>
+                  <div className="bg-purple-950/20 border border-purple-800/20 rounded-lg px-3 py-2 text-center">
+                    <div className="text-[10px] text-purple-400/70 mb-0.5">UV</div>
+                    <div className="text-sm font-mono font-bold text-purple-300">{reading.uvIndex?.toFixed(1) ?? "--"}</div>
+                  </div>
+                </div>
+              )}
+              {dataUpdatedAt > 0 && (
+                <p className="text-[10px] text-muted-foreground/50 font-mono mt-2 text-center">
+                  Son guncelleme: {new Date(dataUpdatedAt).toLocaleTimeString("tr-TR")}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground bg-background/30 rounded-lg px-3 py-4 text-center">
+              Henuz olcum yok
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-2 pt-1">
+          {device.isVirtual && !isOnFire && (
+            <Button
+              data-testid="button-simulate"
+              size="sm"
+              variant="outline"
+              className="w-full text-xs gap-1.5"
+              onClick={() => onSimulate(device.id)}
+              disabled={simulatePending}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              {simulatePending ? "Uretiliyor..." : "Veri Uret"}
+            </Button>
+          )}
+          <Link href={`/devices/${device.id}`} className="w-full">
+            <Button size="sm" className="w-full text-xs" variant="outline" data-testid="button-view-detail">
+              Detay Sayfasi
+            </Button>
+          </Link>
         </div>
       </div>
     </div>
