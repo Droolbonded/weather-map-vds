@@ -12,7 +12,7 @@ import {
   useSimulateReading,
 } from "@workspace/api-client-react";
 import {
-  X, Plus, Cpu, Activity, Thermometer, Droplets, Gauge, MapPin, Wifi, WifiOff,
+  X, Plus, Cpu, Activity, Thermometer, Droplets, Gauge, MapPin, Wifi, WifiOff, Flame,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,8 @@ type DeviceWithReading = {
   device: {
     id: number; name: string; description?: string | null;
     latitude: number; longitude: number; isVirtual: boolean;
-    isActive: boolean; deviceId: string; createdAt: string; updatedAt: string;
+    isActive: boolean; deviceId: string; fireMode: boolean;
+    fireModeStartedAt?: string | null; createdAt: string; updatedAt: string;
   };
   latestReading?: {
     id: number; deviceId: number; temperature: number; humidity: number;
@@ -42,7 +43,22 @@ type DeviceWithReading = {
   } | null;
 };
 
-function createDeviceIcon(isVirtual: boolean, isActive: boolean) {
+function createDeviceIcon(isVirtual: boolean, isActive: boolean, onFire: boolean) {
+  if (onFire) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:38px;height:38px;">
+        <div style="position:absolute;width:38px;height:38px;border-radius:50%;background:rgba(239,68,68,0.35);animation:pulse-map 1.2s ease-out infinite;"></div>
+        <div style="position:absolute;width:30px;height:30px;border-radius:50%;background:rgba(239,68,68,0.15);animation:pulse-map 1.2s ease-out infinite 0.4s;"></div>
+        <div style="width:26px;height:26px;border-radius:50%;background:#7f1d1d;border:2px solid #ef4444;display:flex;align-items:center;justify-content:center;position:relative;z-index:1;box-shadow:0 0 12px rgba(239,68,68,0.6);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="#ef4444" stroke="#ef4444" stroke-width="1">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+          </svg>
+        </div>
+      </div>`,
+      iconSize: [38, 38], iconAnchor: [19, 19],
+    });
+  }
   const color = isActive ? (isVirtual ? "#06b6d4" : "#3b82f6") : "#475569";
   const glowColor = isActive ? (isVirtual ? "rgba(6,182,212,0.35)" : "rgba(59,130,246,0.35)") : "rgba(71,85,105,0.15)";
   const border = isVirtual ? "dashed" : "solid";
@@ -124,7 +140,7 @@ function PureLeafletMap({
 
     for (const item of markers) {
       const id = item.device.id;
-      const icon = createDeviceIcon(item.device.isVirtual, item.device.isActive);
+      const icon = createDeviceIcon(item.device.isVirtual, item.device.isActive, item.device.fireMode);
       const captured = item;
 
       if (leafletMarkers.current.has(id)) {
@@ -167,6 +183,7 @@ export default function MapPage() {
   const simulateReading = useSimulateReading();
 
   const markers = useMemo(() => mapData as DeviceWithReading[], [mapData]);
+  const hasActiveFire = useMemo(() => markers.some((m) => m.device.fireMode), [markers]);
 
   useEffect(() => {
     if (!selectedDevice) return;
@@ -178,14 +195,16 @@ export default function MapPage() {
     if (selectedDevice) setPanelVisible(true);
   }, [selectedDevice?.device.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Faster polling (8s) when fire is active, normal 30s otherwise
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
+    const ms = hasActiveFire ? 8000 : 30000;
     intervalRef.current = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: getGetAllLatestReadingsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-    }, 30000);
+    }, ms);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [queryClient]);
+  }, [queryClient, hasActiveFire]);
 
   const invalidateMap = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: getGetAllLatestReadingsQueryKey() });
@@ -233,6 +252,8 @@ export default function MapPage() {
     });
   };
 
+  const fireCount = summary?.fireDevices ?? 0;
+
   return (
     <div className="relative w-full h-full overflow-hidden">
       <style>{`@keyframes pulse-map { 0%{transform:scale(1);opacity:.7} 100%{transform:scale(2.5);opacity:0} }`}</style>
@@ -248,6 +269,14 @@ export default function MapPage() {
             value={summary?.avgHumidity != null ? `${Number(summary.avgHumidity).toFixed(1)}%` : "--"} color="text-blue-400" />
           <StatBadge icon={Gauge} label="Ort.Basinc"
             value={summary?.avgPressure != null ? `${Number(summary.avgPressure).toFixed(0)} hPa` : "--"} color="text-purple-400" />
+          {fireCount > 0 && (
+            <Link href="/notifications">
+              <div className="pointer-events-auto flex items-center gap-2 bg-red-950/80 backdrop-blur border border-red-700/60 rounded-lg px-3 py-1.5 shadow-sm cursor-pointer hover:bg-red-900/80 transition-colors">
+                <Flame className="w-3.5 h-3.5 text-red-400" />
+                <span className="text-[11px] text-red-300 font-mono font-semibold">{fireCount} YANGIN AKTIF</span>
+              </div>
+            </Link>
+          )}
         </div>
         <div className="pointer-events-auto flex items-center gap-2">
           {addingMode && (
@@ -284,7 +313,7 @@ export default function MapPage() {
           <div className="p-4 space-y-4">
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${selectedDevice.device.isActive ? "bg-primary" : "bg-muted-foreground"}`} />
                   <span className="text-[11px] text-muted-foreground font-mono">
                     {selectedDevice.device.isVirtual ? "SANAL" : "GERCEK"} ESP32
@@ -292,8 +321,13 @@ export default function MapPage() {
                   {selectedDevice.device.isActive
                     ? <Wifi className="w-3 h-3 text-primary" />
                     : <WifiOff className="w-3 h-3 text-muted-foreground" />}
+                  {selectedDevice.device.fireMode && (
+                    <span className="flex items-center gap-1 text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
+                      <Flame className="w-3 h-3" /> YANGIN
+                    </span>
+                  )}
                 </div>
-                <h2 className="font-semibold text-sm truncate" data-testid="text-device-name">
+                <h2 className={`font-semibold text-sm truncate ${selectedDevice.device.fireMode ? "text-red-300" : ""}`} data-testid="text-device-name">
                   {selectedDevice.device.name}
                 </h2>
                 {selectedDevice.device.description && (
@@ -308,6 +342,12 @@ export default function MapPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {selectedDevice.device.fireMode && selectedDevice.device.fireModeStartedAt && (
+              <div className="bg-red-950/40 border border-red-800/40 rounded-lg px-3 py-2 text-xs text-red-300">
+                Yangin basladi: {new Date(selectedDevice.device.fireModeStartedAt).toLocaleString("tr-TR")}
+              </div>
+            )}
 
             <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground bg-background/30 rounded-md px-3 py-2">
               <MapPin className="w-3 h-3 text-primary flex-shrink-0" />
@@ -340,7 +380,7 @@ export default function MapPage() {
             </div>
 
             <div className="flex flex-col gap-2 pt-1">
-              {selectedDevice.device.isVirtual && (
+              {selectedDevice.device.isVirtual && !selectedDevice.device.fireMode && (
                 <Button
                   data-testid="button-simulate"
                   size="sm"
@@ -410,6 +450,10 @@ export default function MapPage() {
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full border-2 border-dashed border-cyan-400 bg-cyan-400/20" />
           Sanal
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full border-2 border-solid border-red-500 bg-red-900/60" />
+          Yangin
         </div>
       </div>
     </div>

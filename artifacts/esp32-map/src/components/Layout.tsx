@@ -1,25 +1,30 @@
 import { Link, useLocation } from "wouter";
-import { Map, Cpu, Activity, BookOpen } from "lucide-react";
+import { Map, Cpu, BookOpen, Bell } from "lucide-react";
+import { useGetDashboardSummary } from "@workspace/api-client-react";
 
 const navItems = [
   { href: "/", label: "Harita", icon: Map },
   { href: "/devices", label: "Cihazlar", icon: Cpu },
+  { href: "/notifications", label: "Bildirimler", icon: Bell },
   { href: "/esp32-guide", label: "ESP32 Rehber", icon: BookOpen },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { data: summary } = useGetDashboardSummary();
+  const fireCount = summary?.fireDevices ?? 0;
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       {/* Sidebar */}
       <aside className="w-16 flex flex-col items-center py-4 border-r border-border bg-card gap-2 z-10">
         <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-center mb-4">
-          <Activity className="w-5 h-5 text-primary" />
+          <Map className="w-5 h-5 text-primary" />
         </div>
 
         {navItems.map(({ href, label, icon: Icon }) => {
           const isActive = href === "/" ? location === "/" : location.startsWith(href);
+          const isNotif = href === "/notifications";
           return (
             <Link key={href} href={href}>
               <div
@@ -32,8 +37,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 }`}
               >
                 <Icon className="w-5 h-5" />
+                {/* Fire badge on notifications icon */}
+                {isNotif && fireCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-lg">
+                    {fireCount > 9 ? "9+" : fireCount}
+                  </span>
+                )}
                 <span className="absolute left-full ml-2 px-2 py-1 rounded text-xs font-medium bg-card border border-border text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg">
                   {label}
+                  {isNotif && fireCount > 0 && (
+                    <span className="ml-1 text-red-400">({fireCount})</span>
+                  )}
                 </span>
               </div>
             </Link>
