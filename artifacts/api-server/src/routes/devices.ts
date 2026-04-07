@@ -260,6 +260,24 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   });
 });
 
+router.get("/readings/fire-history", async (_req, res): Promise<void> => {
+  // Return last 40 fire readings across all devices (weatherCondition Fire or Extreme Fire)
+  const rows = await db
+    .select({
+      reading: sensorReadingsTable,
+      device: devicesTable,
+    })
+    .from(sensorReadingsTable)
+    .innerJoin(devicesTable, eq(sensorReadingsTable.deviceId, devicesTable.id))
+    .where(
+      sql`${sensorReadingsTable.weatherCondition} IN ('Fire', 'Extreme Fire')`
+    )
+    .orderBy(desc(sensorReadingsTable.recordedAt))
+    .limit(40);
+
+  res.json(rows);
+});
+
 router.get("/readings/all", async (_req, res): Promise<void> => {
   // Only return devices that have at least one reading (real devices without data stay hidden)
   const devices = await db.select().from(devicesTable).orderBy(devicesTable.createdAt);
