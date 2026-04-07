@@ -1,6 +1,5 @@
-import { useState, useCallback, useEffect, useRef, memo, useMemo } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,7 +13,10 @@ import {
   useStartFire,
   useStopFire,
 } from "@workspace/api-client-react";
-import { X, Plus, Cpu, Activity, Thermometer, Droplets, Gauge, MapPin, Wifi, WifiOff, Flame, ShieldOff } from "lucide-react";
+import {
+  X, Plus, Cpu, Activity, Thermometer, Droplets, Gauge,
+  MapPin, Wifi, WifiOff, Flame, ShieldOff,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,35 +30,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
 });
-
-function createDeviceIcon(isVirtual: boolean, isActive: boolean, isOnFire: boolean) {
-  if (isOnFire) {
-    return L.divIcon({
-      className: "",
-      html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:40px;height:40px;">
-        <div style="position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(239,68,68,0.15);animation:fire-outer 1.2s ease-out infinite;"></div>
-        <div style="position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(249,115,22,0.25);animation:fire-inner 0.8s ease-out infinite alternate;"></div>
-        <div style="width:20px;height:20px;border-radius:50%;background:rgba(239,68,68,0.2);border:2.5px solid #ef4444;display:flex;align-items:center;justify-content:center;position:relative;z-index:1;">
-          <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;"></div>
-        </div>
-      </div>`,
-      iconSize: [40, 40], iconAnchor: [20, 20], popupAnchor: [0, -20],
-    });
-  }
-  const color = isActive ? (isVirtual ? "#06b6d4" : "#3b82f6") : "#475569";
-  const glowColor = isActive ? (isVirtual ? "rgba(6,182,212,0.35)" : "rgba(59,130,246,0.35)") : "rgba(71,85,105,0.15)";
-  const border = isVirtual ? "dashed" : "solid";
-  return L.divIcon({
-    className: "",
-    html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;">
-      ${isActive ? `<div style="position:absolute;width:32px;height:32px;border-radius:50%;background:${glowColor};animation:pulse-map 2s ease-out infinite;"></div>` : ""}
-      <div style="width:22px;height:22px;border-radius:50%;background:${color}20;border:2px ${border} ${color};display:flex;align-items:center;justify-content:center;position:relative;z-index:1;box-shadow:0 0 8px ${glowColor};">
-        <div style="width:8px;height:8px;border-radius:50%;background:${color};"></div>
-      </div>
-    </div>`,
-    iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -16],
-  });
-}
 
 type DeviceWithReading = {
   device: {
@@ -73,21 +46,98 @@ type DeviceWithReading = {
   } | null;
 };
 
-// Imperative marker manager — completely bypasses React reconciler
-function ImperativeMarkers({
+function createDeviceIcon(isVirtual: boolean, isActive: boolean, isOnFire: boolean) {
+  if (isOnFire) {
+    return L.divIcon({
+      className: "",
+      html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:40px;height:40px;">
+        <div style="position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(239,68,68,0.15);animation:fire-outer 1.2s ease-out infinite;"></div>
+        <div style="position:absolute;width:28px;height:28px;border-radius:50%;background:rgba(249,115,22,0.25);animation:fire-inner 0.8s ease-out infinite alternate;"></div>
+        <div style="width:20px;height:20px;border-radius:50%;background:rgba(239,68,68,0.2);border:2.5px solid #ef4444;display:flex;align-items:center;justify-content:center;position:relative;z-index:1;">
+          <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;"></div>
+        </div>
+      </div>`,
+      iconSize: [40, 40], iconAnchor: [20, 20],
+    });
+  }
+  const color = isActive ? (isVirtual ? "#06b6d4" : "#3b82f6") : "#475569";
+  const glowColor = isActive ? (isVirtual ? "rgba(6,182,212,0.35)" : "rgba(59,130,246,0.35)") : "rgba(71,85,105,0.15)";
+  const border = isVirtual ? "dashed" : "solid";
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;display:flex;align-items:center;justify-content:center;width:32px;height:32px;">
+      ${isActive ? `<div style="position:absolute;width:32px;height:32px;border-radius:50%;background:${glowColor};animation:pulse-map 2s ease-out infinite;"></div>` : ""}
+      <div style="width:22px;height:22px;border-radius:50%;background:${color}20;border:2px ${border} ${color};display:flex;align-items:center;justify-content:center;position:relative;z-index:1;box-shadow:0 0 8px ${glowColor};">
+        <div style="width:8px;height:8px;border-radius:50%;background:${color};"></div>
+      </div>
+    </div>`,
+    iconSize: [32, 32], iconAnchor: [16, 16],
+  });
+}
+
+// Fully imperative Leaflet map — React NEVER touches the map's internal DOM.
+// This eliminates the insertBefore conflict that occurs when react-leaflet
+// JSX components are reconciled by React 18's concurrent renderer.
+function PureLeafletMap({
   markers,
+  addingMode,
   onMarkerClick,
+  onMapClick,
 }: {
   markers: DeviceWithReading[];
+  addingMode: boolean;
   onMarkerClick: (item: DeviceWithReading) => void;
+  onMapClick: (lat: number, lng: number) => void;
 }) {
-  const map = useMap();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const leafletMarkers = useRef<Map<number, L.Marker>>(new Map());
-  const onClickRef = useRef(onMarkerClick);
-  // Keep callback ref current without causing re-renders
-  onClickRef.current = onMarkerClick;
+  const onMarkerClickRef = useRef(onMarkerClick);
+  const onMapClickRef = useRef(onMapClick);
+  const addingModeRef = useRef(addingMode);
 
+  // Always keep callback refs current — no re-render needed
+  onMarkerClickRef.current = onMarkerClick;
+  onMapClickRef.current = onMapClick;
+  addingModeRef.current = addingMode;
+
+  // Create Leaflet map once — never re-create it
   useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      center: [39.0, 35.0],
+      zoom: 6,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    map.on("click", (e: L.LeafletMouseEvent) => {
+      if (addingModeRef.current) {
+        setTimeout(() => onMapClickRef.current(e.latlng.lat, e.latlng.lng), 0);
+      }
+    });
+
+    mapRef.current = map;
+
+    return () => {
+      // Clean up markers first, then destroy map
+      for (const m of leafletMarkers.current.values()) m.remove();
+      leafletMarkers.current.clear();
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Imperatively update markers whenever data changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
     const currentIds = new Set(markers.map((m) => m.device.id));
 
     // Remove stale markers
@@ -98,82 +148,37 @@ function ImperativeMarkers({
       }
     }
 
-    // Add/update markers
+    // Add / update markers
     for (const item of markers) {
       const id = item.device.id;
       const icon = createDeviceIcon(item.device.isVirtual, item.device.isActive, item.device.fireMode);
-      const captured = item; // stable closure reference
+      const captured = item;
 
       if (leafletMarkers.current.has(id)) {
         const m = leafletMarkers.current.get(id)!;
         m.setIcon(icon);
         m.setLatLng([item.device.latitude, item.device.longitude]);
-        // Re-bind click with fresh data
         m.off("click");
-        // Use setTimeout to defer state update out of Leaflet's event cycle,
-        // preventing the React concurrent mode DOM flush conflict
-        m.on("click", () => { setTimeout(() => onClickRef.current(captured), 0); });
+        m.on("click", () => setTimeout(() => onMarkerClickRef.current(captured), 0));
       } else {
         const m = L.marker([item.device.latitude, item.device.longitude], { icon }).addTo(map);
-        m.on("click", () => { setTimeout(() => onClickRef.current(captured), 0); });
+        m.on("click", () => setTimeout(() => onMarkerClickRef.current(captured), 0));
         leafletMarkers.current.set(id, m);
       }
     }
-  }, [map, markers]);
+  }, [markers]);
 
-  useEffect(() => {
-    return () => {
-      for (const marker of leafletMarkers.current.values()) marker.remove();
-      leafletMarkers.current.clear();
-    };
-  }, []);
+  // Update cursor for add-device mode (pure CSS — no map operations)
+  const cursor = addingMode ? "crosshair" : "grab";
 
-  return null;
-}
-
-// Map click handler for add-device mode
-function MapClickCapture({ onMapClick }: { onMapClick: (lat: number, lng: number) => void }) {
-  const map = useMap();
-  const onMapClickRef = useRef(onMapClick);
-  onMapClickRef.current = onMapClick;
-
-  useEffect(() => {
-    const handler = (e: L.LeafletMouseEvent) => {
-      setTimeout(() => onMapClickRef.current(e.latlng.lat, e.latlng.lng), 0);
-    };
-    map.on("click", handler);
-    return () => { map.off("click", handler); };
-  }, [map]);
-
-  return null;
-}
-
-// Memoized map shell — never re-renders due to panel state changes
-const StableMap = memo(function StableMap({
-  markers,
-  addingMode,
-  onMapClick,
-  onMarkerClick,
-}: {
-  markers: DeviceWithReading[];
-  addingMode: boolean;
-  onMapClick: (lat: number, lng: number) => void;
-  onMarkerClick: (item: DeviceWithReading) => void;
-}) {
   return (
-    <MapContainer
-      center={[39.0, 35.0]}
-      zoom={6}
-      style={{ width: "100%", height: "100%", cursor: addingMode ? "crosshair" : "grab" }}
-      zoomControl={false}
-      attributionControl={false}
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {addingMode && <MapClickCapture onMapClick={onMapClick} />}
-      <ImperativeMarkers markers={markers} onMarkerClick={onMarkerClick} />
-    </MapContainer>
+    <div
+      ref={containerRef}
+      style={{ width: "100%", height: "100%", cursor }}
+      data-testid="leaflet-map"
+    />
   );
-});
+}
 
 export default function MapPage() {
   const { toast } = useToast();
@@ -194,32 +199,34 @@ export default function MapPage() {
   const stopFire = useStopFire();
 
   const fireDeviceCount = (summary as { fireDevices?: number } | undefined)?.fireDevices ?? 0;
-
-  // Stable markers reference — only changes when underlying data changes
   const markers = useMemo(() => mapData as DeviceWithReading[], [mapData]);
 
-  // Sync selected device with fresh data from server
+  // Sync panel with live data
   useEffect(() => {
     if (!selectedDevice) return;
     const fresh = markers.find((d) => d.device.id === selectedDevice.device.id);
     if (fresh) setSelectedDevice(fresh);
   }, [markers]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Slide panel in after device is selected
   useEffect(() => {
     if (selectedDevice) setPanelVisible(true);
   }, [selectedDevice?.device.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh polling
+  // Polling
   useEffect(() => {
-    const interval = fireDeviceCount > 0 ? 8000 : 30000;
+    const ms = fireDeviceCount > 0 ? 8000 : 30000;
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       queryClient.invalidateQueries({ queryKey: getGetAllLatestReadingsQueryKey() });
       queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-    }, interval);
+    }, ms);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [queryClient, fireDeviceCount]);
+
+  const invalidateMap = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: getGetAllLatestReadingsQueryKey() });
+    queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+  }, [queryClient]);
 
   const handleMapClick = useCallback((lat: number, lng: number) => {
     setPendingCoords({ lat, lng });
@@ -235,39 +242,18 @@ export default function MapPage() {
     setTimeout(() => setSelectedDevice(null), 300);
   }, []);
 
-  const invalidateMap = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: getGetAllLatestReadingsQueryKey() });
-    queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-  }, [queryClient]);
-
   const handleCreateVirtualDevice = async () => {
     if (!pendingCoords || !newDeviceName.trim()) return;
     createDevice.mutate(
-      {
-        data: {
-          name: newDeviceName.trim(),
-          description: newDeviceDesc.trim() || null,
-          latitude: pendingCoords.lat,
-          longitude: pendingCoords.lng,
-          isVirtual: true,
-          deviceId: `virtual-${Date.now()}`,
-        },
-      },
+      { data: { name: newDeviceName.trim(), description: newDeviceDesc.trim() || null, latitude: pendingCoords.lat, longitude: pendingCoords.lng, isVirtual: true, deviceId: `virtual-${Date.now()}` } },
       {
         onSuccess: (device) => {
           setPendingCoords(null); setNewDeviceName(""); setNewDeviceDesc("");
-          // Auto-generate initial reading so device appears on map immediately
           simulateReading.mutate(
             { id: device.id },
             {
-              onSuccess: () => {
-                toast({ title: "Sanal cihaz eklendi", description: device.name });
-                invalidateMap();
-              },
-              onError: () => {
-                toast({ title: "Cihaz eklendi", description: `${device.name} — veri uretimi basarisiz` });
-                invalidateMap();
-              },
+              onSuccess: () => { toast({ title: "Sanal cihaz eklendi", description: device.name }); invalidateMap(); },
+              onError: () => { toast({ title: "Cihaz eklendi", description: device.name }); invalidateMap(); },
             }
           );
         },
@@ -285,10 +271,7 @@ export default function MapPage() {
 
   const handleStartFire = (deviceId: number, deviceName: string) => {
     startFire.mutate({ id: deviceId }, {
-      onSuccess: () => {
-        toast({ title: "YANGIN BASLADI", description: `${deviceName} — sicaklik yukseliyor!`, variant: "destructive" });
-        invalidateMap();
-      },
+      onSuccess: () => { toast({ title: "YANGIN BASLADI", description: `${deviceName}`, variant: "destructive" }); invalidateMap(); },
       onError: () => toast({ title: "Hata", description: "Yangin baslatılamadı", variant: "destructive" }),
     });
   };
@@ -310,20 +293,17 @@ export default function MapPage() {
         @keyframes fire-inner { 0%{transform:scale(.9);opacity:.8} 100%{transform:scale(1.2);opacity:.4} }
       `}</style>
 
-      {/* Stats bar */}
+      {/* Stats */}
       <div className="absolute top-4 left-4 right-4 z-[500] flex items-center gap-2 flex-wrap pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-2 flex-wrap flex-1">
           <StatBadge icon={Cpu} label="Toplam" value={summary?.totalDevices ?? "--"} />
           <StatBadge icon={Activity} label="Aktif" value={summary?.activeDevices ?? "--"} color="text-primary" />
           <StatBadge icon={Thermometer} label="Ort.Sicaklik"
-            value={summary?.avgTemperature != null ? `${Number(summary.avgTemperature).toFixed(1)}°C` : "--"}
-            color="text-orange-400" />
+            value={summary?.avgTemperature != null ? `${Number(summary.avgTemperature).toFixed(1)}°C` : "--"} color="text-orange-400" />
           <StatBadge icon={Droplets} label="Ort.Nem"
-            value={summary?.avgHumidity != null ? `${Number(summary.avgHumidity).toFixed(1)}%` : "--"}
-            color="text-blue-400" />
+            value={summary?.avgHumidity != null ? `${Number(summary.avgHumidity).toFixed(1)}%` : "--"} color="text-blue-400" />
           <StatBadge icon={Gauge} label="Ort.Basinc"
-            value={summary?.avgPressure != null ? `${Number(summary.avgPressure).toFixed(0)} hPa` : "--"}
-            color="text-purple-400" />
+            value={summary?.avgPressure != null ? `${Number(summary.avgPressure).toFixed(0)} hPa` : "--"} color="text-purple-400" />
           {fireDeviceCount > 0 && (
             <StatBadge icon={Flame} label="Yangin" value={`${fireDeviceCount} AKTIF`} color="text-red-500" pulse />
           )}
@@ -347,15 +327,15 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Leaflet map — markers managed imperatively to avoid React DOM conflicts */}
-      <StableMap
+      {/* Pure imperative Leaflet map — React never reconciles Leaflet's DOM */}
+      <PureLeafletMap
         markers={markers}
         addingMode={addingMode}
-        onMapClick={handleMapClick}
         onMarkerClick={handleMarkerClick}
+        onMapClick={handleMapClick}
       />
 
-      {/* Side panel — portalled to body */}
+      {/* Side panel — portalled to body, fully outside map DOM */}
       {selectedDevice && createPortal(
         <div
           className={`fixed top-0 right-0 h-full w-80 backdrop-blur-md border-l z-[9999] overflow-y-auto shadow-2xl transition-transform duration-300 ease-in-out ${
@@ -497,7 +477,7 @@ export default function MapPage() {
         document.body
       )}
 
-      {/* Add virtual device dialog */}
+      {/* Add device dialog */}
       {pendingCoords && createPortal(
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] bg-card border border-border rounded-xl shadow-2xl p-5 w-80">
           <h3 className="font-semibold text-sm mb-1">Sanal ESP32 Ekle</h3>
@@ -507,43 +487,25 @@ export default function MapPage() {
           <div className="space-y-3">
             <div>
               <Label className="text-xs text-muted-foreground">Cihaz Adi</Label>
-              <Input
-                data-testid="input-device-name"
-                value={newDeviceName}
+              <Input data-testid="input-device-name" value={newDeviceName}
                 onChange={(e) => setNewDeviceName(e.target.value)}
-                placeholder="ornek: Sanal - Istanbul"
-                className="mt-1 text-sm h-8"
-                autoFocus
-                onKeyDown={(e) => e.key === "Enter" && handleCreateVirtualDevice()}
-              />
+                placeholder="ornek: Sanal - Istanbul" className="mt-1 text-sm h-8" autoFocus
+                onKeyDown={(e) => e.key === "Enter" && handleCreateVirtualDevice()} />
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Aciklama (Opsiyonel)</Label>
-              <Input
-                data-testid="input-device-desc"
-                value={newDeviceDesc}
+              <Input data-testid="input-device-desc" value={newDeviceDesc}
                 onChange={(e) => setNewDeviceDesc(e.target.value)}
-                placeholder="Kisa aciklama..."
-                className="mt-1 text-sm h-8"
-              />
+                placeholder="Kisa aciklama..." className="mt-1 text-sm h-8" />
             </div>
             <div className="flex gap-2 pt-1">
-              <Button
-                data-testid="button-cancel-add"
-                size="sm"
-                variant="outline"
-                className="flex-1 text-xs"
-                onClick={() => { setPendingCoords(null); setNewDeviceName(""); setNewDeviceDesc(""); }}
-              >
+              <Button data-testid="button-cancel-add" size="sm" variant="outline" className="flex-1 text-xs"
+                onClick={() => { setPendingCoords(null); setNewDeviceName(""); setNewDeviceDesc(""); }}>
                 Iptal
               </Button>
-              <Button
-                data-testid="button-confirm-add"
-                size="sm"
-                className="flex-1 text-xs"
+              <Button data-testid="button-confirm-add" size="sm" className="flex-1 text-xs"
                 onClick={handleCreateVirtualDevice}
-                disabled={!newDeviceName.trim() || createDevice.isPending || simulateReading.isPending}
-              >
+                disabled={!newDeviceName.trim() || createDevice.isPending || simulateReading.isPending}>
                 {createDevice.isPending || simulateReading.isPending ? "Ekleniyor..." : "Ekle"}
               </Button>
             </div>
