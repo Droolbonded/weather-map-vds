@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, memo } from "react";
 import { createPortal } from "react-dom";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useQueryClient } from "@tanstack/react-query";
@@ -73,8 +73,105 @@ type DeviceWithReading = {
   } | null;
 };
 
-// Leaflet map extracted to a stable memoized component so it never re-renders
-// due to panel state changes - prevents insertBefore DOM error
+// Imperative marker manager — bypasses React reconciler entirely to avoid
+// the Leaflet insertBefore DOM conflict with React 18 concurrent mode
+function ImperativeMarkers({
+  markers,
+  onMarkerClick,
+}: {
+  markers: DeviceWithReading[];
+  onMarkerClick: (item: DeviceWithReading) => void;
+}) {
+  const map = useMap();
+  const leafletMarkers = useRef<Map<number, L.Marker>>(new Map());
+  const onMarkerClickRef = useRef(onMarkerClick);
+
+  useEffect(() => {
+    onMarkerClickRef.current = onMarkerClick;
+  }, [onMarkerClick]);
+
+  useEffect(() => {
+    const currentIds = new Set(markers.map((m) => m.device.id));
+
+    // Remove markers no longer in data
+    for (const [id, marker] of leafletMarkers.current) {
+      if (!currentIds.has(id)) {
+        marker.remove();
+        leafletMarkers.current.delete(id);
+      }
+    }
+
+    // Add or update markers
+    for (const item of markers) {
+      const id = item.device.id;
+      const icon = createDeviceIcon(item.device.isVirtual, item.device.isActive, item.device.fireMode);
+
+      if (leafletMarkers.current.has(id)) {
+        // Update icon and position imperatively (no React DOM touching)
+        const m = leafletMarkers.current.get(id)!;
+        m.setIcon(icon);
+        m.setLatLng([item.device.latitude, item.device.longitude]);
+      } else {
+        // Create brand new Leaflet marker via imperative API
+        const m = L.marker([item.device.latitude, item.device.longitude], { icon }).addTo(map);
+        m.on("click", () => onMarkerClickRef.current(item));
+        leafletMarkers.current.set(id, m);
+      }
+    }
+
+    // Update click handlers for all existing markers (data may have changed)
+    for (const item of markers) {
+      const m = leafletMarkers.current.get(item.device.id);
+      if (m) {
+        m.off("click");
+        const captured = item;
+        m.on("click", () => onMarkerClickRef.current(captured));
+      }
+    }
+  }, [map, markers]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      for (const marker of leafletMarkers.current.values()) {
+        marker.remove();
+      }
+      leafletMarkers.current.clear();
+    };
+  }, []);
+
+  return null;
+}
+
+// Map click handler for adding virtual devices
+function MapClickCapture({
+  onMapClick,
+  addingMode,
+}: {
+  onMapClick: (lat: number, lng: number) => void;
+  addingMode: boolean;
+}) {
+  const map = useMap();
+  const addingModeRef = useRef(addingMode);
+  const onMapClickRef = useRef(onMapClick);
+
+  useEffect(() => { addingModeRef.current = addingMode; }, [addingMode]);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
+
+  useEffect(() => {
+    const handler = (e: L.LeafletMouseEvent) => {
+      if (addingModeRef.current) {
+        onMapClickRef.current(e.latlng.lat, e.latlng.lng);
+      }
+    };
+    map.on("click", handler);
+    return () => { map.off("click", handler); };
+  }, [map]);
+
+  return null;
+}
+
+// The map itself — rendered once, never re-rendered by React
 const StableMap = memo(function StableMap({
   markers,
   addingMode,
@@ -96,26 +193,10 @@ const StableMap = memo(function StableMap({
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <MapClickCapture onMapClick={onMapClick} addingMode={addingMode} />
-      {markers.map((item) => (
-        <Marker
-          key={item.device.id}
-          position={[item.device.latitude, item.device.longitude]}
-          icon={createDeviceIcon(item.device.isVirtual, item.device.isActive, item.device.fireMode)}
-          eventHandlers={{ click: () => onMarkerClick(item) }}
-        />
-      ))}
+      <ImperativeMarkers markers={markers} onMarkerClick={onMarkerClick} />
     </MapContainer>
   );
 });
-
-function MapClickCapture({ onMapClick, addingMode }: { onMapClick: (lat: number, lng: number) => void; addingMode: boolean }) {
-  useMapEvents({
-    click(e) {
-      if (addingMode) onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
 
 export default function MapPage() {
   const { toast } = useToast();
@@ -136,23 +217,21 @@ export default function MapPage() {
   const stopFire = useStopFire();
 
   const fireDeviceCount = (summary as { fireDevices?: number } | undefined)?.fireDevices ?? 0;
+  const markers = mapData as DeviceWithReading[];
 
   // Keep selected device in sync with live data
   useEffect(() => {
     if (selectedDevice) {
-      const fresh = (mapData as DeviceWithReading[]).find((d) => d.device.id === selectedDevice.device.id);
+      const fresh = markers.find((d) => d.device.id === selectedDevice.device.id);
       if (fresh) setSelectedDevice(fresh);
     }
   }, [mapData]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Show panel when device is selected
   useEffect(() => {
-    if (selectedDevice) {
-      setPanelVisible(true);
-    }
+    if (selectedDevice) setPanelVisible(true);
   }, [selectedDevice?.device.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh polling
+  // Polling interval
   useEffect(() => {
     const interval = fireDeviceCount > 0 ? 8000 : 30000;
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -226,7 +305,6 @@ export default function MapPage() {
   };
 
   const isOnFire = selectedDevice?.device.fireMode ?? false;
-  const markers = mapData as DeviceWithReading[];
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -236,7 +314,7 @@ export default function MapPage() {
         @keyframes fire-inner { 0%{transform:scale(.9);opacity:.8} 100%{transform:scale(1.2);opacity:.4} }
       `}</style>
 
-      {/* Stats bar - rendered above the map via absolute positioning */}
+      {/* Stats bar */}
       <div className="absolute top-4 left-4 right-4 z-[500] flex items-center gap-2 flex-wrap pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-2 flex-wrap flex-1">
           <StatBadge icon={Cpu} label="Toplam" value={summary?.totalDevices ?? "--"} />
@@ -253,7 +331,7 @@ export default function MapPage() {
             data-testid="button-add-virtual-device"
             size="sm"
             variant={addingMode ? "default" : "outline"}
-            onClick={() => { setAddingMode(!addingMode); setPendingCoords(null); }}
+            onClick={() => { setAddingMode((p) => !p); setPendingCoords(null); }}
             className={`gap-2 text-xs font-medium shadow-lg ${addingMode ? "bg-primary text-primary-foreground" : "bg-card/90 backdrop-blur border-border"}`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -262,7 +340,7 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* Leaflet map — isolated stable component to prevent DOM conflicts */}
+      {/* The map — imperative markers never touch React reconciler */}
       <StableMap
         markers={markers}
         addingMode={addingMode}
@@ -270,7 +348,7 @@ export default function MapPage() {
         onMarkerClick={handleMarkerClick}
       />
 
-      {/* Device side panel — rendered via portal to avoid Leaflet DOM conflicts */}
+      {/* Side panel — portalled to document.body, completely outside Leaflet DOM */}
       {selectedDevice && createPortal(
         <div
           className={`fixed top-0 right-0 h-full w-80 backdrop-blur-md border-l z-[9999] overflow-y-auto shadow-2xl transition-transform duration-300 ease-in-out ${
@@ -333,7 +411,9 @@ export default function MapPage() {
                   {isOnFire && (
                     <div className="flex items-center justify-between bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 mb-2">
                       <span className="text-xs text-red-400">Sicaklik</span>
-                      <span className="font-mono font-bold text-red-400 text-lg">{selectedDevice.latestReading.temperature.toFixed(1)}°C</span>
+                      <span className="font-mono font-bold text-red-400 text-lg">
+                        {selectedDevice.latestReading.temperature.toFixed(1)}°C
+                      </span>
                     </div>
                   )}
                   <WeatherCard
@@ -348,7 +428,9 @@ export default function MapPage() {
                   />
                 </>
               ) : (
-                <div className="text-sm text-muted-foreground bg-background/30 rounded-lg px-3 py-4 text-center">Henuz olcum yok</div>
+                <div className="text-sm text-muted-foreground bg-background/30 rounded-lg px-3 py-4 text-center">
+                  Henuz olcum yok
+                </div>
               )}
             </div>
 
@@ -359,7 +441,7 @@ export default function MapPage() {
                     <Button
                       data-testid="button-start-fire"
                       size="sm"
-                      className="w-full gap-2 text-xs bg-red-600 hover:bg-red-500 text-white border-red-500"
+                      className="w-full gap-2 text-xs bg-red-600 hover:bg-red-500 text-white"
                       onClick={() => handleStartFire(selectedDevice.device.id, selectedDevice.device.name)}
                       disabled={startFire.isPending}
                     >
@@ -461,7 +543,7 @@ export default function MapPage() {
       )}
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 z-[500] bg-card/90 backdrop-blur border border-border rounded-lg px-3 py-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground pointer-events-none">
+      <div className="absolute bottom-4 left-4 z-[500] bg-card/90 backdrop-blur border border-border rounded-lg px-3 py-2 flex gap-3 text-[11px] text-muted-foreground pointer-events-none">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full border-2 border-solid border-blue-500 bg-blue-500/20" />
           Gercek
@@ -479,12 +561,11 @@ export default function MapPage() {
   );
 }
 
-function StatBadge({ icon: Icon, label, value, color = "text-foreground", pulse = false }: {
+function StatBadge({
+  icon: Icon, label, value, color = "text-foreground", pulse = false,
+}: {
   icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string | number;
-  color?: string;
-  pulse?: boolean;
+  label: string; value: string | number; color?: string; pulse?: boolean;
 }) {
   return (
     <div className={`flex items-center gap-2 bg-card/90 backdrop-blur border rounded-lg px-3 py-1.5 shadow-sm ${pulse ? "border-red-800/50 animate-pulse" : "border-border"}`}>
