@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ESP32 Weather Map API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: devices
+    description: ESP32 device management
+  - name: readings
+    description: Sensor readings
 paths:
   /healthz:
     get:
@@ -24,6 +28,221 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      summary: List all ESP32 devices
+      responses:
+        "200":
+          description: List of devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+    post:
+      operationId: createDevice
+      tags: [devices]
+      summary: Create a new ESP32 device (real or virtual)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceBody"
+      responses:
+        "201":
+          description: Device created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+
+  /devices/{id}:
+    get:
+      operationId: getDevice
+      tags: [devices]
+      summary: Get a specific device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Device details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateDevice
+      tags: [devices]
+      summary: Update device info
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDeviceBody"
+      responses:
+        "200":
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+    delete:
+      operationId: deleteDevice
+      tags: [devices]
+      summary: Delete a device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /devices/{id}/readings:
+    get:
+      operationId: getDeviceReadings
+      tags: [readings]
+      summary: Get latest readings for a device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Readings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SensorReading"
+    post:
+      operationId: createReading
+      tags: [readings]
+      summary: Submit sensor data from an ESP32 device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReadingBody"
+      responses:
+        "201":
+          description: Reading saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensorReading"
+
+  /devices/{id}/latest:
+    get:
+      operationId: getDeviceLatestReading
+      tags: [readings]
+      summary: Get the most recent reading for a device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Latest reading
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensorReading"
+        "404":
+          description: No readings yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /devices/{id}/simulate:
+    post:
+      operationId: simulateReading
+      tags: [readings]
+      summary: Generate a random sensor reading for a virtual device
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: Simulated reading saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensorReading"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [devices]
+      summary: Dashboard stats - total devices, active, avg temperature, etc.
+      responses:
+        "200":
+          description: Summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /readings/all:
+    get:
+      operationId: getAllLatestReadings
+      tags: [readings]
+      summary: Get latest reading for every device (for map display)
+      responses:
+        "200":
+          description: Latest readings for all devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeviceWithReading"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +253,225 @@ components:
       required:
         - status
 
+    Device:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        isVirtual:
+          type: boolean
+        isActive:
+          type: boolean
+        deviceId:
+          type: string
+          description: Unique hardware ID or slug
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - latitude
+        - longitude
+        - isVirtual
+        - isActive
+        - deviceId
+        - createdAt
+        - updatedAt
+
+    CreateDeviceBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        isVirtual:
+          type: boolean
+        deviceId:
+          type: string
+      required:
+        - name
+        - latitude
+        - longitude
+        - isVirtual
+        - deviceId
+
+    UpdateDeviceBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        isActive:
+          type: boolean
+
+    SensorReading:
+      type: object
+      properties:
+        id:
+          type: integer
+        deviceId:
+          type: integer
+        temperature:
+          type: number
+          format: double
+          description: Celsius
+        humidity:
+          type: number
+          format: double
+          description: Percentage 0-100
+        pressure:
+          type: number
+          format: double
+          description: hPa
+        heatIndex:
+          type: number
+          format: double
+          nullable: true
+          description: Feels like temperature
+        windSpeed:
+          type: number
+          format: double
+          nullable: true
+          description: km/h
+        windDirection:
+          type: number
+          format: double
+          nullable: true
+          description: Degrees 0-360
+        uvIndex:
+          type: number
+          format: double
+          nullable: true
+        weatherCondition:
+          type: string
+          nullable: true
+          description: Sunny, Cloudy, Rainy, etc.
+        recordedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - deviceId
+        - temperature
+        - humidity
+        - pressure
+        - recordedAt
+
+    CreateReadingBody:
+      type: object
+      properties:
+        temperature:
+          type: number
+          format: double
+        humidity:
+          type: number
+          format: double
+        pressure:
+          type: number
+          format: double
+        heatIndex:
+          type: number
+          format: double
+          nullable: true
+        windSpeed:
+          type: number
+          format: double
+          nullable: true
+        windDirection:
+          type: number
+          format: double
+          nullable: true
+        uvIndex:
+          type: number
+          format: double
+          nullable: true
+        weatherCondition:
+          type: string
+          nullable: true
+      required:
+        - temperature
+        - humidity
+        - pressure
+
+    DeviceWithReading:
+      type: object
+      properties:
+        device:
+          $ref: "#/components/schemas/Device"
+        latestReading:
+          $ref: "#/components/schemas/SensorReading"
+          nullable: true
+      required:
+        - device
+
+    DashboardSummary:
+      type: object
+      properties:
+        totalDevices:
+          type: integer
+        activeDevices:
+          type: integer
+        virtualDevices:
+          type: integer
+        avgTemperature:
+          type: number
+          format: double
+          nullable: true
+        avgHumidity:
+          type: number
+          format: double
+          nullable: true
+        avgPressure:
+          type: number
+          format: double
+          nullable: true
+        lastUpdated:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - totalDevices
+        - activeDevices
+        - virtualDevices
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message
