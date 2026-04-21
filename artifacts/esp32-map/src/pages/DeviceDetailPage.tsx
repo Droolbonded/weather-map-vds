@@ -38,6 +38,8 @@ type Reading = {
   windDirection?: number | null;
   uvIndex?: number | null;
   weatherCondition?: string | null;
+  gasValue?: number | null;
+  flameValue?: number | null;
   recordedAt: string;
 };
 
@@ -359,6 +361,8 @@ export default function DeviceDetailPage() {
               windDirection={latestReading.windDirection}
               uvIndex={latestReading.uvIndex}
               weatherCondition={latestReading.weatherCondition}
+              gasValue={latestReading.gasValue}
+              flameValue={latestReading.flameValue}
             />
           ) : (
             <div className="text-center text-muted-foreground py-6 text-sm">
@@ -440,7 +444,7 @@ export default function DeviceDetailPage() {
               <table className="w-full text-xs">
                 <thead className="sticky top-0 bg-card border-b border-border">
                   <tr>
-                    {["Tarih", "Sicaklik", "Nem", "Basinc", "Ruzgar", "UV", "Durum"].map((h) => (
+                    {["Tarih", "Sicaklik", "Nem", "Basinc", "Gaz", "Alev", "Durum"].map((h) => (
                       <th key={h} className="text-left px-4 py-2.5 text-muted-foreground font-medium">{h}</th>
                     ))}
                   </tr>
@@ -458,8 +462,12 @@ export default function DeviceDetailPage() {
                       <td className="px-4 py-2.5 font-mono text-orange-400">{r.temperature.toFixed(1)}°C</td>
                       <td className="px-4 py-2.5 font-mono text-blue-400">{r.humidity.toFixed(1)}%</td>
                       <td className="px-4 py-2.5 font-mono">{r.pressure.toFixed(0)} hPa</td>
-                      <td className="px-4 py-2.5 font-mono">{r.windSpeed != null ? `${r.windSpeed.toFixed(1)} km/h` : "--"}</td>
-                      <td className="px-4 py-2.5 font-mono">{r.uvIndex != null ? r.uvIndex.toFixed(1) : "--"}</td>
+                      <td className={`px-4 py-2.5 font-mono ${r.gasValue === 0 ? "text-yellow-400" : ""}`}>
+                        {r.gasValue != null ? (r.gasValue === 0 ? "⚠ Algılandi" : "Normal") : "--"}
+                      </td>
+                      <td className={`px-4 py-2.5 font-mono ${r.flameValue === 0 ? "text-red-400" : ""}`}>
+                        {r.flameValue != null ? (r.flameValue === 0 ? "⚠ Algılandi" : "Yok") : "--"}
+                      </td>
                       <td className="px-4 py-2.5">{r.weatherCondition ?? "--"}</td>
                     </tr>
                   ))}
