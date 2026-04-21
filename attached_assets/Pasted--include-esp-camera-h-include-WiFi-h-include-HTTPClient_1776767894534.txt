@@ -1,0 +1,165 @@
+#include "esp_camera.h"
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiManager.h> 
+#include "DHT.h"
+
+// --- ÖZEL PARAMETRELER (Varsayılan Değerler) ---
+char custom_modul_id[10] = "4";
+char custom_sunucu_url[100] = "http://zonguldak67.alwaysdata.net/gozcu3/api4.php";
+char custom_enlem[20] = "41.4305";
+char custom_boylam[20] = "31.8004";
+
+// --- SENSÖR PİNLERİ ---
+#define DHTPIN 14
+#define ALEVPIN 13
+#define GAZPIN 12
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+// --- AI-THINKER KAMERA PİNLERİ ---
+#define PWDN_GPIO_NUM 32
+#define RESET_GPIO_NUM -1
+#define XCLK_GPIO_NUM 0
+#define SIOD_GPIO_NUM 26
+#define SIOC_GPIO_NUM 27
+#define Y9_GPIO_NUM 35
+#define Y8_GPIO_NUM 34
+#define Y7_GPIO_NUM 39
+#define Y6_GPIO_NUM 36
+#define Y5_GPIO_NUM 21
+#define Y4_GPIO_NUM 19
+#define Y3_GPIO_NUM 18
+#define Y2_GPIO_NUM 5
+#define VSYNC_GPIO_NUM 25
+#define HREF_GPIO_NUM 23
+#define PCLK_GPIO_NUM 22
+
+void fotoCekVeGonder() {
+  Serial.println("[KAMERA] Fotograf cekiliyor...");
+  camera_fb_t * fb = esp_camera_fb_get();
+  if (!fb) { Serial.println("[HATA] Kare yakalanamadi!"); return; }
+
+  HTTPClient http;
+  String url = String(custom_sunucu_url) + "?id=" + String(custom_modul_id);
+  
+  if (http.begin(url)) {
+    Serial.println("[POST] Resim gonderiliyor...");
+    http.setTimeout(20000);
+    int httpCode = http.POST(fb->buf, fb->len);
+    Serial.printf("[POST] Yanit: %d\n", httpCode);
+    http.end();
+  }
+  esp_camera_fb_return(fb);
+}
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  pinMode(ALEVPIN, INPUT);
+  pinMode(GAZPIN, INPUT);
+
+  pinMode(0, INPUT_PULLUP);
+
+  WiFiManager wm;
+
+  // --- SIFIRLAMA KONTROLÜ ---
+  // Cihaz açıldığında GPIO 0 toprağa çekilmişse (Butona basılı tutuluyorsa)
+  // Not: Kod yüklerken GPIO 0 zaten GND'de olduğu için wm.resetSettings() çalışabilir.
+  // Bunu engellemek için küçük bir bekleme ve seri port onayı ekleyebilirsin.
+  
+  Serial.println("Ayarlari sifirlamak icin 3 saniye icinde butona basin...");
+  delay(3000); 
+
+  if (digitalRead(0) == LOW) {
+    Serial.println("[SISTEM] Ayarlar siliniyor...");
+    wm.resetSettings(); 
+    Serial.println("[SISTEM] Hafiza temizlendi, yeniden basliyor.");
+    delay(1000);
+    ESP.restart();
+  }
+
+  WiFiManagerParameter custom_id_text("id", "Modul ID", custom_modul_id, 10);
+  WiFiManagerParameter custom_url_text("url", "Sunucu URL", custom_sunucu_url, 100);
+  WiFiManagerParameter custom_lat_text("lat", "Enlem", custom_enlem, 20);
+  WiFiManagerParameter custom_lon_text("lon", "Boylam", custom_boylam, 20);
+
+  wm.addParameter(&custom_id_text);
+  wm.addParameter(&custom_url_text);
+  wm.addParameter(&custom_lat_text);
+  wm.addParameter(&custom_lon_text);
+
+  // Kayıtlı ağ yoksa "ESP32CAM_KURULUM" adıyla yayın yapar
+  if (!wm.autoConnect("ESP32CAM_KURULUM", "12345678")) {
+    Serial.println("Baglanti hatasi, resetleniyor...");
+    delay(3000);
+    ESP.restart();
+  }
+
+  // Değerleri kaydet
+  strcpy(custom_modul_id, custom_id_text.getValue());
+  strcpy(custom_sunucu_url, custom_url_text.getValue());
+  strcpy(custom_enlem, custom_lat_text.getValue());
+  strcpy(custom_boylam, custom_lon_text.getValue());
+
+  Serial.println("\n[WIFI] Baglandi!");
+
+  // --- KAMERA BAŞLATMA ---
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = Y2_GPIO_NUM; config.pin_d1 = Y3_GPIO_NUM;
+  config.pin_d2 = Y4_GPIO_NUM; config.pin_d3 = Y5_GPIO_NUM;
+  config.pin_d4 = Y6_GPIO_NUM; config.pin_d5 = Y7_GPIO_NUM;
+  config.pin_d6 = Y8_GPIO_NUM; config.pin_d7 = Y9_GPIO_NUM;
+  config.pin_xclk = XCLK_GPIO_NUM; config.pin_pclk = PCLK_GPIO_NUM;
+  config.pin_vsync = VSYNC_GPIO_NUM; config.pin_href = HREF_GPIO_NUM;
+  config.pin_sscb_sda = SIOD_GPIO_NUM; config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn = PWDN_GPIO_NUM; config.pin_reset = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000; config.pixel_format = PIXFORMAT_JPEG;
+
+  if(psramFound()){
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 12;
+    config.fb_count = 1;
+  } else {
+    config.frame_size = FRAMESIZE_SVGA;
+    config.jpeg_quality = 12;
+    config.fb_count = 1;
+  }
+
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) Serial.printf("[HATA] Kamera: 0x%x\n", err);
+}
+
+void loop() {
+  if (WiFi.status() == WL_CONNECTED) {
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    int alev = !digitalRead(ALEVPIN);
+    int gaz = digitalRead(GAZPIN);
+    int yangin = (alev == 1 || gaz == LOW || (t > 70 && h < 20)) ? 1 : 0;
+
+    HTTPClient http;
+    String url = String(custom_sunucu_url) + "?islem=veri_guncelle&id=" + String(custom_modul_id) +
+                 "&mac=" + WiFi.macAddress() + 
+                 "&sicaklik=" + String(t) + "&nem=" + String(h) +
+                 "&durum=" + String(yangin) + "&gaz=" + String(gaz) +
+                 "&alev=" + String(alev) + "&enlem=" + String(custom_enlem) + 
+                 "&boylam=" + String(custom_boylam) + "&kamerali=1";
+
+    Serial.println("\n--- VERI GONDERIMI ---");
+    Serial.println("[URL] " + url);
+
+    if (http.begin(url)) {
+      int httpCode = http.GET();
+      if (httpCode == 200) {
+        String payload = http.getString();
+        Serial.println("[SUNUCU] Yanit: " + payload);
+        if (payload.indexOf("\"resim_gonder\":1") != -1) fotoCekVeGonder();
+      }
+      http.end();
+    }
+  }
+  delay(15000); 
+}
