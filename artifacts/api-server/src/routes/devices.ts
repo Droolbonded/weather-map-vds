@@ -296,6 +296,44 @@ router.get("/readings/all", async (_req, res): Promise<void> => {
   res.json(withData);
 });
 
+// ── ESP32-CAM GÖRÜNTÜ ALMA ──────────────────────────────────────────────────
+// POST /api/esp32?id={id}  — raw JPEG body
+router.post("/esp32", async (req, res): Promise<void> => {
+  const espId = req.query["id"] as string;
+  if (!espId) { res.status(400).json({ error: "id gerekli" }); return; }
+
+  const chunks: Buffer[] = [];
+  req.on("data", (chunk: Buffer) => chunks.push(chunk));
+  req.on("end", async () => {
+    const imgData = Buffer.concat(chunks);
+    if (imgData.length < 500) { res.json({ durum: "veri_yok" }); return; }
+
+    const fs = await import("fs");
+    const path = await import("path");
+    const { fileURLToPath } = await import("url");
+    const __dirname = path.default.dirname(fileURLToPath(import.meta.url));
+    const uploadDir = path.default.resolve(__dirname, "../uploads");
+    if (!fs.default.existsSync(uploadDir)) fs.default.mkdirSync(uploadDir, { recursive: true });
+
+    const filePath = path.default.join(uploadDir, `cam_${espId}.jpg`);
+    fs.default.writeFileSync(filePath, imgData);
+    res.json({ durum: "kaydedildi" });
+  });
+});
+
+// GET /api/esp32/image/:id — kaydedilen kamera görüntüsü
+router.get("/esp32/image/:id", async (req, res): Promise<void> => {
+  const fs = await import("fs");
+  const path = await import("path");
+  const { fileURLToPath } = await import("url");
+  const __dirname = path.default.dirname(fileURLToPath(import.meta.url));
+  const filePath = path.default.resolve(__dirname, `../uploads/cam_${req.params.id}.jpg`);
+  if (!fs.default.existsSync(filePath)) { res.status(404).json({ error: "Görüntü yok" }); return; }
+  res.setHeader("Content-Type", "image/jpeg");
+  res.setHeader("Cache-Control", "no-cache");
+  res.sendFile(filePath);
+});
+
 // ── ESP32 UYUMLULUK ENDPOINT'İ ──────────────────────────────────────────────
 // api4.php ile aynı GET formatını destekler:
 // GET /api/esp32?islem=veri_guncelle&id=1&sicaklik=25&nem=60&durum=0&gaz=1&alev=1&enlem=41.44&boylam=31.80
@@ -340,6 +378,7 @@ router.get("/esp32", async (req, res): Promise<void> => {
     const alev     = parseInt((req.query["alev"] as string) ?? "1", 10);
     const enlem    = parseFloat((req.query["enlem"] as string) ?? "41.44");
     const boylam   = parseFloat((req.query["boylam"] as string) ?? "31.80");
+    const kamerali = parseInt((req.query["kamerali"] as string) ?? "0", 10);
 
     if (!espId) { res.status(400).json({ error: "id gerekli" }); return; }
 
@@ -386,7 +425,9 @@ router.get("/esp32", async (req, res): Promise<void> => {
       weatherCondition: yangin ? "Fire" : "Normal",
     });
 
-    res.json({ resim_gonder: 0 });
+    // Kameralı cihaz yangın algıladıysa resim iste
+    const resimGonder = (yangin && kamerali === 1) ? 1 : 0;
+    res.json({ resim_gonder: resimGonder });
     return;
   }
 
