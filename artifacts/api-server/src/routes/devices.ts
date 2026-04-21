@@ -296,4 +296,101 @@ router.get("/readings/all", async (_req, res): Promise<void> => {
   res.json(withData);
 });
 
+// ── ESP32 UYUMLULUK ENDPOINT'İ ──────────────────────────────────────────────
+// api4.php ile aynı GET formatını destekler:
+// GET /api/esp32?islem=veri_guncelle&id=1&sicaklik=25&nem=60&durum=0&gaz=1&alev=1&enlem=41.44&boylam=31.80
+// GET /api/esp32?islem=getir
+router.get("/esp32", async (req, res): Promise<void> => {
+  const islem = req.query["islem"] as string;
+
+  if (islem === "getir") {
+    const devices = await db.select().from(devicesTable).orderBy(devicesTable.id);
+    const result = await Promise.all(devices.map(async (device) => {
+      const [latest] = await db.select().from(sensorReadingsTable)
+        .where(eq(sensorReadingsTable.deviceId, device.id))
+        .orderBy(desc(sensorReadingsTable.recordedAt)).limit(1);
+      const sonFark = latest ? (Date.now() - new Date(latest.recordedAt).getTime()) / 1000 : 9999;
+      return {
+        id: device.id,
+        isim: device.name,
+        enlem: device.latitude,
+        boylam: device.longitude,
+        sicaklik: latest?.temperature ?? 0,
+        nem: latest?.humidity ?? 0,
+        durum: device.fireMode ? 1 : 0,
+        gaz_deger: 1,
+        alev_deger: 1,
+        kamerali: 0,
+        son_guncelleme: latest?.recordedAt ?? device.createdAt,
+        son_analiz: null,
+        aktif_durum: sonFark < 60 ? 1 : 0,
+      };
+    }));
+    res.json(result);
+    return;
+  }
+
+  if (islem === "veri_guncelle") {
+    const espId    = parseInt(req.query["id"] as string ?? "0", 10);
+    const mac      = (req.query["mac"] as string) ?? "";
+    const sicaklik = parseFloat((req.query["sicaklik"] as string) ?? "0");
+    const nem      = parseFloat((req.query["nem"] as string) ?? "0");
+    const durum    = parseInt((req.query["durum"] as string) ?? "0", 10);
+    const gaz      = parseInt((req.query["gaz"] as string) ?? "1", 10);
+    const alev     = parseInt((req.query["alev"] as string) ?? "1", 10);
+    const enlem    = parseFloat((req.query["enlem"] as string) ?? "41.44");
+    const boylam   = parseFloat((req.query["boylam"] as string) ?? "31.80");
+
+    if (!espId) { res.status(400).json({ error: "id gerekli" }); return; }
+
+    // Cihazı bul ya da otomatik oluştur
+    let [device] = await db.select().from(devicesTable)
+      .where(eq(devicesTable.deviceId, String(espId)));
+
+    if (!device) {
+      const [created] = await db.insert(devicesTable).values({
+        name: mac ? `ESP32 (${mac})` : `ESP32 #${espId}`,
+        deviceId: String(espId),
+        latitude: enlem,
+        longitude: boylam,
+        isVirtual: false,
+        isActive: true,
+        fireMode: false,
+      }).returning();
+      device = created;
+    } else {
+      // Konum güncellemesi
+      await db.update(devicesTable)
+        .set({ latitude: enlem, longitude: boylam })
+        .where(eq(devicesTable.id, device.id));
+    }
+
+    // Yangın modunu güncelle
+    const yangin = durum === 1 || alev === 0 || gaz === 0;
+    if (yangin && !device.fireMode) {
+      await db.update(devicesTable)
+        .set({ fireMode: true, fireModeStartedAt: new Date() })
+        .where(eq(devicesTable.id, device.id));
+    } else if (!yangin && device.fireMode) {
+      await db.update(devicesTable)
+        .set({ fireMode: false, fireModeStartedAt: null })
+        .where(eq(devicesTable.id, device.id));
+    }
+
+    // Sensör okumasını kaydet
+    await db.insert(sensorReadingsTable).values({
+      deviceId: device.id,
+      temperature: sicaklik,
+      humidity: nem,
+      pressure: 1013,
+      weatherCondition: yangin ? "Fire" : "Normal",
+    });
+
+    res.json({ resim_gonder: 0 });
+    return;
+  }
+
+  res.json({ sonuc: "ok" });
+});
+
 export default router;
