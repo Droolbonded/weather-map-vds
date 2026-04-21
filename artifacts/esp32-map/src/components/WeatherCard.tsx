@@ -1,4 +1,4 @@
-import { Thermometer, Droplets, Gauge, Wind, Compass, Sun, Cloud } from "lucide-react";
+import { Thermometer, Droplets, Gauge, Wind, Compass, Sun, Cloud, Flame, FlaskConical } from "lucide-react";
 
 interface WeatherCardProps {
   temperature?: number | null;
@@ -9,6 +9,8 @@ interface WeatherCardProps {
   windDirection?: number | null;
   uvIndex?: number | null;
   weatherCondition?: string | null;
+  gasValue?: number | null;
+  flameValue?: number | null;
   compact?: boolean;
 }
 
@@ -37,6 +39,8 @@ export default function WeatherCard({
   windDirection,
   uvIndex,
   weatherCondition,
+  gasValue,
+  flameValue,
   compact = false,
 }: WeatherCardProps) {
   const metrics = [
@@ -81,6 +85,18 @@ export default function WeatherCard({
       color: uvIndex != null
         ? uvIndex > 7 ? "text-red-400" : uvIndex > 4 ? "text-orange-400" : "text-yellow-400"
         : "text-muted-foreground",
+    },
+    {
+      icon: FlaskConical,
+      label: "Gaz",
+      value: gasValue != null ? (gasValue === 0 ? "⚠ Algılandi" : "Normal") : "--",
+      color: gasValue === 0 ? "text-yellow-400" : "text-primary",
+    },
+    {
+      icon: Flame,
+      label: "Alev",
+      value: flameValue != null ? (flameValue === 0 ? "⚠ Algılandi" : "Yok") : "--",
+      color: flameValue === 0 ? "text-red-400" : "text-primary",
     },
   ];
 

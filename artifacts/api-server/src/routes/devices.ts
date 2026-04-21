@@ -514,6 +514,8 @@ router.get("/esp32", async (req, res): Promise<void> => {
       humidity: nem,
       pressure: 1013,
       weatherCondition: yangin ? "Fire" : "Normal",
+      gasValue: gaz,
+      flameValue: alev,
     });
 
     // Kameralı cihaz takibine ekle

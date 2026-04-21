@@ -14,6 +14,8 @@ export const sensorReadingsTable = pgTable("sensor_readings", {
   windDirection: doublePrecision("wind_direction"),
   uvIndex: doublePrecision("uv_index"),
   weatherCondition: text("weather_condition"),
+  gasValue: integer("gas_value"),
+  flameValue: integer("flame_value"),
   recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
