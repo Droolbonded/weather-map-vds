@@ -48,6 +48,28 @@ function generateFireReading(deviceId: number, secondsSinceStart: number) {
   return { deviceId, temperature, humidity, pressure, heatIndex, windSpeed, windDirection, uvIndex, weatherCondition };
 }
 
+// Arka planda 30 saniyede bir: 60 saniyedir veri gelmeyenleri pasife çek
+setInterval(async () => {
+  try {
+    const allDevices = await db.select().from(devicesTable).where(eq(devicesTable.isActive, true));
+    const now = Date.now();
+    for (const device of allDevices) {
+      const [latest] = await db.select({ recordedAt: sensorReadingsTable.recordedAt })
+        .from(sensorReadingsTable)
+        .where(eq(sensorReadingsTable.deviceId, device.id))
+        .orderBy(desc(sensorReadingsTable.recordedAt))
+        .limit(1);
+      if (!latest) continue;
+      const diffSec = (now - new Date(latest.recordedAt).getTime()) / 1000;
+      if (diffSec >= 60) {
+        await db.update(devicesTable)
+          .set({ isActive: false })
+          .where(eq(devicesTable.id, device.id));
+      }
+    }
+  } catch { /* sessiz hata */ }
+}, 30000);
+
 // Background fire simulation - generates readings every 8 seconds for all fire-mode devices
 setInterval(async () => {
   try {
@@ -70,7 +92,31 @@ setInterval(async () => {
 
 router.get("/devices", async (_req, res): Promise<void> => {
   const devices = await db.select().from(devicesTable).orderBy(devicesTable.createdAt);
-  res.json(devices);
+
+  // Son okuma zamanına göre isActive'i dinamik hesapla (60 saniye)
+  const now = Date.now();
+  const devicesWithActivity = await Promise.all(devices.map(async (device) => {
+    const [latest] = await db.select({ recordedAt: sensorReadingsTable.recordedAt })
+      .from(sensorReadingsTable)
+      .where(eq(sensorReadingsTable.deviceId, device.id))
+      .orderBy(desc(sensorReadingsTable.recordedAt))
+      .limit(1);
+
+    if (!latest) return device;
+
+    const diffSec = (now - new Date(latest.recordedAt).getTime()) / 1000;
+    const realActive = diffSec < 60;
+
+    // DB ile uyuşmuyorsa güncelle
+    if (realActive !== device.isActive) {
+      await db.update(devicesTable)
+        .set({ isActive: realActive })
+        .where(eq(devicesTable.id, device.id));
+    }
+    return { ...device, isActive: realActive };
+  }));
+
+  res.json(devicesWithActivity);
 });
 
 router.post("/devices", async (req, res): Promise<void> => {
@@ -234,9 +280,23 @@ router.post("/devices/:id/fire/stop", async (req, res): Promise<void> => {
 });
 
 router.get("/dashboard/summary", async (_req, res): Promise<void> => {
+  // Aktif sayısını son 60 saniyeye göre gerçek zamanlı hesapla
+  const allDevices = await db.select().from(devicesTable);
+  const now = Date.now();
+  let realActiveCount = 0;
+  for (const device of allDevices) {
+    const [latest] = await db.select({ recordedAt: sensorReadingsTable.recordedAt })
+      .from(sensorReadingsTable)
+      .where(eq(sensorReadingsTable.deviceId, device.id))
+      .orderBy(desc(sensorReadingsTable.recordedAt))
+      .limit(1);
+    if (latest && (now - new Date(latest.recordedAt).getTime()) / 1000 < 60) {
+      realActiveCount++;
+    }
+  }
+
   const [totals] = await db.select({
     totalDevices: count(),
-    activeDevices: sql<number>`count(*) filter (where ${devicesTable.isActive} = true)`,
     virtualDevices: sql<number>`count(*) filter (where ${devicesTable.isVirtual} = true)`,
     fireDevices: sql<number>`count(*) filter (where ${devicesTable.fireMode} = true)`,
   }).from(devicesTable);
@@ -250,7 +310,7 @@ router.get("/dashboard/summary", async (_req, res): Promise<void> => {
 
   res.json({
     totalDevices: Number(totals?.totalDevices ?? 0),
-    activeDevices: Number(totals?.activeDevices ?? 0),
+    activeDevices: realActiveCount,
     virtualDevices: Number(totals?.virtualDevices ?? 0),
     fireDevices: Number(totals?.fireDevices ?? 0),
     avgTemperature: avgData[0]?.avgTemperature ? parseFloat(String(avgData[0].avgTemperature)) : null,
@@ -398,9 +458,9 @@ router.get("/esp32", async (req, res): Promise<void> => {
       }).returning();
       device = created;
     } else {
-      // Konum güncellemesi
+      // Konum güncelle + cihazı aktif yap
       await db.update(devicesTable)
-        .set({ latitude: enlem, longitude: boylam })
+        .set({ latitude: enlem, longitude: boylam, isActive: true })
         .where(eq(devicesTable.id, device.id));
     }
 
