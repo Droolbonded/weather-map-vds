@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -20,7 +20,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { ArrowLeft, Activity, Wifi, WifiOff, MapPin, Cpu } from "lucide-react";
+import { ArrowLeft, Activity, Wifi, WifiOff, MapPin, Cpu, Camera, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,6 +92,47 @@ export default function DeviceDetailPage() {
 
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState("");
+
+  // Kamera durumu
+  const [camStatus, setCamStatus] = useState<{
+    hasCamera: boolean; hasImage: boolean; imageTime: string | null; pendingRequest: boolean;
+  } | null>(null);
+  const [requestingPhoto, setRequestingPhoto] = useState(false);
+  const [imgTs, setImgTs] = useState(Date.now());
+  const prevImageTime = useRef<string | null>(null);
+
+  const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+  const espDeviceId = (device as Device | undefined)?.deviceId ?? null;
+
+  const fetchCamStatus = useCallback(async () => {
+    if (!espDeviceId) return;
+    try {
+      const r = await fetch(`${BASE}/api/esp32/${espDeviceId}/camera-status`);
+      const data = await r.json();
+      setCamStatus(data);
+      if (data.imageTime && data.imageTime !== prevImageTime.current) {
+        prevImageTime.current = data.imageTime;
+        setImgTs(Date.now());
+        setRequestingPhoto(false);
+      }
+    } catch { /* sessiz */ }
+  }, [espDeviceId, BASE]);
+
+  useEffect(() => {
+    if (!espDeviceId) return;
+    fetchCamStatus();
+    const interval = setInterval(fetchCamStatus, requestingPhoto ? 3000 : 10000);
+    return () => clearInterval(interval);
+  }, [espDeviceId, fetchCamStatus, requestingPhoto]);
+
+  const handleRequestPhoto = async () => {
+    if (!espDeviceId) return;
+    setRequestingPhoto(true);
+    await fetch(`${BASE}/api/esp32/${espDeviceId}/request-photo`, { method: "POST" });
+    toast({ title: "Fotoğraf isteği gönderildi", description: "Cihaz bir sonraki senkronizasyonda fotoğraf gönderecek (~15 sn)." });
+    fetchCamStatus();
+  };
 
   const handleSimulate = () => {
     simulateReading.mutate(
@@ -239,6 +280,59 @@ export default function DeviceDetailPage() {
           <InfoCard label="Konum" value={`${d.latitude.toFixed(5)}, ${d.longitude.toFixed(5)}`} mono icon={MapPin} />
           <InfoCard label="Kayit Tarihi" value={new Date(d.createdAt).toLocaleDateString("tr-TR")} />
         </motion.div>
+
+        {/* Kamera Paneli — gerçek cihazlarda her zaman göster */}
+        {!d.isVirtual && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+            className="bg-card border border-border rounded-xl overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold">Canlı Kamera</h2>
+                {camStatus?.pendingRequest && (
+                  <span className="text-[10px] text-yellow-400 font-mono animate-pulse">Bekleniyor...</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {camStatus?.imageTime && (
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {new Date(camStatus.imageTime).toLocaleTimeString("tr-TR")}
+                  </span>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 h-7 text-xs"
+                  onClick={handleRequestPhoto}
+                  disabled={requestingPhoto}
+                >
+                  <RefreshCw className={`w-3 h-3 ${requestingPhoto ? "animate-spin" : ""}`} />
+                  {requestingPhoto ? "Bekleniyor..." : "Fotoğraf İste"}
+                </Button>
+              </div>
+            </div>
+            <div className="bg-black/40 flex items-center justify-center min-h-48">
+              {camStatus?.hasImage ? (
+                <img
+                  src={`${BASE}/api/esp32/image/${espDeviceId}?t=${imgTs}`}
+                  alt="Kamera görüntüsü"
+                  className="max-w-full max-h-96 object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-10 text-muted-foreground">
+                  <Camera className="w-8 h-8 opacity-30" />
+                  <span className="text-xs">Henüz görüntü yok</span>
+                  <span className="text-[11px] opacity-60">Fotoğraf İste butonuna basın</span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
 
         {/* Latest reading */}
         <motion.div
