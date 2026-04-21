@@ -356,6 +356,10 @@ router.get("/readings/all", async (_req, res): Promise<void> => {
   res.json(withData);
 });
 
+// Bellek içi durum: fotoğraf isteği bekleyen cihazlar ve kameralı cihazlar
+const photoRequestSet = new Set<string>();   // ESP deviceId string (örn: "4")
+const cameraDeviceSet = new Set<string>();   // kamerali=1 gönderen cihazlar
+
 // ── ESP32-CAM GÖRÜNTÜ ALMA ──────────────────────────────────────────────────
 // POST /api/esp32?id={id}  — raw JPEG body
 router.post("/esp32", async (req, res): Promise<void> => {
@@ -389,9 +393,36 @@ router.get("/esp32/image/:id", async (req, res): Promise<void> => {
   const __dirname = path.default.dirname(fileURLToPath(import.meta.url));
   const filePath = path.default.resolve(__dirname, `../uploads/cam_${req.params.id}.jpg`);
   if (!fs.default.existsSync(filePath)) { res.status(404).json({ error: "Görüntü yok" }); return; }
+  const stat = fs.default.statSync(filePath);
   res.setHeader("Content-Type", "image/jpeg");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("X-Image-Time", stat.mtime.toISOString());
   res.sendFile(filePath);
+});
+
+// POST /api/esp32/:espId/request-photo — anlık fotoğraf isteği
+router.post("/esp32/:espId/request-photo", (req, res): void => {
+  const espId = req.params.espId;
+  photoRequestSet.add(espId);
+  res.json({ ok: true, message: `Cihaz ${espId} için fotoğraf isteği oluşturuldu` });
+});
+
+// GET /api/esp32/:espId/camera-status — kamera durumu ve son görüntü zamanı
+router.get("/esp32/:espId/camera-status", async (req, res): Promise<void> => {
+  const espId = req.params.espId;
+  const fs = await import("fs");
+  const path = await import("path");
+  const { fileURLToPath } = await import("url");
+  const __dirname = path.default.dirname(fileURLToPath(import.meta.url));
+  const filePath = path.default.resolve(__dirname, `../uploads/cam_${espId}.jpg`);
+  const hasImage = fs.default.existsSync(filePath);
+  const imageTime = hasImage ? fs.default.statSync(filePath).mtime.toISOString() : null;
+  res.json({
+    hasCamera: cameraDeviceSet.has(espId),
+    hasImage,
+    imageTime,
+    pendingRequest: photoRequestSet.has(espId),
+  });
 });
 
 // ── ESP32 UYUMLULUK ENDPOINT'İ ──────────────────────────────────────────────
@@ -485,8 +516,13 @@ router.get("/esp32", async (req, res): Promise<void> => {
       weatherCondition: yangin ? "Fire" : "Normal",
     });
 
-    // Kameralı cihaz yangın algıladıysa resim iste
-    const resimGonder = (yangin && kamerali === 1) ? 1 : 0;
+    // Kameralı cihaz takibine ekle
+    if (kamerali === 1) cameraDeviceSet.add(String(espId));
+
+    // Yangın algılandıysa VEYA elle fotoğraf istendiyse resim gönder
+    const manuelIstek = photoRequestSet.has(String(espId));
+    if (manuelIstek) photoRequestSet.delete(String(espId));
+    const resimGonder = (yangin && kamerali === 1) || manuelIstek ? 1 : 0;
     res.json({ resim_gonder: resimGonder });
     return;
   }
