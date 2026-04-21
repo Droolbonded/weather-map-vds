@@ -1,0 +1,125 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+#include <WiFiManager.h>
+#include "DHT.h"
+
+// --- SENSÖR PİN TANIMLAMALARI ---
+#define DHTPIN     14   // D5
+#define ALEV_PIN   12   // D6
+#define GAZ_PIN    13   // D7
+#define DHTTYPE    DHT11
+
+// --- VARSAYİLAN PARAMETRELER (WiFiManager arayüzünden değiştirilebilir) ---
+char custom_modul_id[10]   = "1";
+char custom_sunucu_url[150] = "https://f5283bdf-f435-4b09-831d-ff50711e3b86-00-1h0ywzdom06qf.janeway.replit.dev/api/esp32";
+char custom_enlem[20]      = "41.4357";
+char custom_boylam[20]     = "31.8208";
+
+DHT dht(DHTPIN, DHTTYPE);
+
+void setup() {
+  Serial.begin(115200);
+  dht.begin();
+  pinMode(ALEV_PIN, INPUT);
+  pinMode(GAZ_PIN, INPUT);
+  pinMode(0, INPUT_PULLUP); // FLASH butonu — D3/GPIO0
+
+  WiFiManager wm;
+
+  // FLASH butonuna basılıysa ayarları sıfırla
+  Serial.println("Sifirlama kontrol ediliyor (3 sn)...");
+  delay(3000);
+  if (digitalRead(0) == LOW) {
+    Serial.println("[SISTEM] Ayarlar siliniyor...");
+    wm.resetSettings();
+    delay(1000);
+    ESP.restart();
+  }
+
+  // WiFiManager parametreleri
+  WiFiManagerParameter p_id("id",  "Modul ID",     custom_modul_id,   10);
+  WiFiManagerParameter p_url("url","Sunucu URL",   custom_sunucu_url, 150);
+  WiFiManagerParameter p_lat("lat","Sabit Enlem",  custom_enlem,      20);
+  WiFiManagerParameter p_lon("lon","Sabit Boylam", custom_boylam,     20);
+
+  wm.addParameter(&p_id);
+  wm.addParameter(&p_url);
+  wm.addParameter(&p_lat);
+  wm.addParameter(&p_lon);
+
+  // Bağlanamazsa "GOZCU_SETUP" ağını aç
+  if (!wm.autoConnect("GOZCU_SETUP", "12345678")) {
+    Serial.println("[HATA] Baglanti kurulamadi, yeniden baslatiliyor...");
+    delay(3000);
+    ESP.restart();
+  }
+
+  strcpy(custom_modul_id,  p_id.getValue());
+  strcpy(custom_sunucu_url, p_url.getValue());
+  strcpy(custom_enlem,     p_lat.getValue());
+  strcpy(custom_boylam,    p_lon.getValue());
+
+  Serial.println("[WIFI] Baglandi! IP: " + WiFi.localIP().toString());
+}
+
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WIFI] Baglanti yok!");
+    delay(5000);
+    return;
+  }
+
+  // Sensör okumaları
+  float nem      = dht.readHumidity();
+  float sicaklik = dht.readTemperature();
+  int   alev     = digitalRead(ALEV_PIN); // 0 = alev var
+  int   gaz      = digitalRead(GAZ_PIN);  // 0 = gaz var
+
+  if (isnan(nem) || isnan(sicaklik)) {
+    Serial.println("[SENSOR] DHT okuma hatasi!");
+    delay(5000);
+    return;
+  }
+
+  // Yangın tespiti
+  int yangin = 0;
+  if (alev == 0 || gaz == 0 || (sicaklik > 70.0 && nem < 20.0)) {
+    yangin = 1;
+  }
+
+  Serial.printf("[VERI] Sicaklik: %.1f | Nem: %.1f | Alev: %d | Gaz: %d | Yangin: %d\n",
+                sicaklik, nem, alev, gaz, yangin);
+
+  // URL oluştur
+  String url = String(custom_sunucu_url)
+             + "?islem=veri_guncelle"
+             + "&id="       + String(custom_modul_id)
+             + "&mac="      + WiFi.macAddress()
+             + "&sicaklik=" + String(sicaklik, 1)
+             + "&nem="      + String(nem, 1)
+             + "&durum="    + String(yangin)
+             + "&gaz="      + String(gaz)
+             + "&alev="     + String(alev)
+             + "&enlem="    + String(custom_enlem)
+             + "&boylam="   + String(custom_boylam)
+             + "&kamerali=0";
+
+  Serial.println("[URL] " + url);
+
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure(); // HTTPS sertifika doğrulamasını atla
+  HTTPClient http;
+
+  if (http.begin(secureClient, url)) {
+    int kod = http.GET();
+    if (kod == 200) {
+      Serial.println("[SUNUCU] Veri gonderildi.");
+    } else {
+      Serial.printf("[SUNUCU] Hata: %d\n", kod);
+    }
+    http.end();
+  }
+
+  delay(15000); // 15 saniyede bir gonder
+}
