@@ -1,0 +1,44 @@
+[Unit]
+Description=Weather Map API server
+Documentation=https://github.com/ (project repo)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Sunucu uzerinde dagitim sahibi olarak ayarlayin (root onerilmez).
+User=www-data
+Group=www-data
+
+# Build edilmis API dist'i bu yola yerlesir.
+WorkingDirectory=/var/www/weather-map/artifacts/api-server
+
+# .env.production REPO KOKUNDE durur (artifacts/.. bir ust dizin),
+# bu nedenle systemd icin tam yol verilir.
+EnvironmentFile=/var/www/weather-map/.env.production
+
+# Node calismasi icin standart yol; `which node` ile dogrulayip degistirebilirsiniz.
+ExecStart=/usr/bin/node --enable-source-maps dist/index.mjs
+
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+
+# Loglar journald'a gider: `journalctl -u weather-map-api -f`
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=weather-map-api
+
+# Guvenlik sertlestirmeleri
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/weather-map/artifacts/api-server/uploads
+
+# Linux dosya tanimlayici limiti (yuksek istek hacmi icin)
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
