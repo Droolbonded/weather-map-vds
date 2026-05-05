@@ -22,7 +22,8 @@ const queryClient = new QueryClient({
 });
 
 // Configure API to talk to Alwaysdata instead of VDS
-setBaseUrl("http://67zonguldak.alwaysdata.net/api.php");
+// We add a trailing slash to help with PATH_INFO routing in PHP
+setBaseUrl("https://67zonguldak.alwaysdata.net/api.php");
 
 function Router() {
 // ... (rest of the code same)
