@@ -10,6 +10,7 @@ import DeviceDetailPage from "@/pages/DeviceDetailPage";
 import Esp32GuidePage from "@/pages/Esp32GuidePage";
 import NotificationsPage from "@/pages/NotificationsPage";
 import NotFound from "@/pages/not-found";
+import { setBaseUrl } from "@workspace/api-client-react";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +21,12 @@ const queryClient = new QueryClient({
   },
 });
 
+// Configure API to talk to Alwaysdata instead of VDS
+setBaseUrl("http://67zonguldak.alwaysdata.net/api.php");
+
 function Router() {
+// ... (rest of the code same)
+
   return (
     <Layout>
       <Switch>
