@@ -183,7 +183,7 @@ export default function MapPage() {
   const createDevice = useCreateDevice();
   const simulateReading = useSimulateReading();
 
-  const markers = useMemo(() => mapData as DeviceWithReading[], [mapData]);
+  const markers = useMemo(() => (mapData as DeviceWithReading[]).filter(m => m.device.isActive), [mapData]);
   const hasActiveFire = useMemo(() => markers.some((m) => m.device.fireMode), [markers]);
 
   useEffect(() => {

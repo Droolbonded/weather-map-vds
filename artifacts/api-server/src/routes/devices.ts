@@ -352,7 +352,7 @@ router.get("/readings/all", async (_req, res): Promise<void> => {
   );
 
   // Filter: only include devices that have at least one reading
-  const withData = result.filter((r) => r.latestReading !== null);
+  const withData = result.filter((r) => r.latestReading !== null && r.device.isActive);
   res.json(withData);
 });
 
