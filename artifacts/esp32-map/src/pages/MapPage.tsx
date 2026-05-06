@@ -183,7 +183,15 @@ export default function MapPage() {
   const createDevice = useCreateDevice();
   const simulateReading = useSimulateReading();
 
-  const markers = useMemo(() => (mapData as DeviceWithReading[]).filter(m => m.device.isActive), [mapData]);
+  const markers = useMemo(() => {
+    const now = Date.now();
+    return (mapData as DeviceWithReading[]).filter(m => {
+      // Must be manually active and have a reading within the last 60 seconds
+      if (!m.device.isActive || !m.latestReading) return false;
+      const lastUpdate = new Date(m.latestReading.recordedAt).getTime();
+      return (now - lastUpdate) / 1000 < 60;
+    });
+  }, [mapData]);
   const hasActiveFire = useMemo(() => markers.some((m) => m.device.fireMode), [markers]);
 
   useEffect(() => {
