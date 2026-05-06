@@ -9,6 +9,7 @@ import {
   getGetDeviceReadingsQueryKey,
   useSimulateReading,
   useUpdateDevice,
+  _baseUrl,
 } from "@workspace/api-client-react";
 import {
   LineChart,
@@ -109,8 +110,9 @@ export default function DeviceDetailPage() {
 
   const fetchCamStatus = useCallback(async () => {
     if (!espDeviceId) return;
+    const apiBase = _baseUrl || "";
     try {
-      const r = await fetch(`${BASE}/api/esp32/${espDeviceId}/camera-status`);
+      const r = await fetch(`${apiBase}/api/esp32/${espDeviceId}/camera-status`);
       const data = await r.json();
       setCamStatus(data);
       if (data.imageTime && data.imageTime !== prevImageTime.current) {
@@ -131,7 +133,8 @@ export default function DeviceDetailPage() {
   const handleRequestPhoto = async () => {
     if (!espDeviceId) return;
     setRequestingPhoto(true);
-    await fetch(`${BASE}/api/esp32/${espDeviceId}/request-photo`, { method: "POST" });
+    const apiBase = _baseUrl || "";
+    await fetch(`${apiBase}/api/esp32/${espDeviceId}/request-photo`, { method: "POST" });
     toast({ title: "Fotoğraf isteği gönderildi", description: "Cihaz bir sonraki senkronizasyonda fotoğraf gönderecek (~15 sn)." });
     fetchCamStatus();
   };
@@ -320,7 +323,7 @@ export default function DeviceDetailPage() {
             <div className="bg-black/40 flex items-center justify-center min-h-48">
               {camStatus?.hasImage ? (
                 <img
-                  src={`${BASE}/api/esp32/image/${espDeviceId}?t=${imgTs}`}
+                  src={`${_baseUrl || ""}/api/esp32/image/${espDeviceId}?t=${imgTs}`}
                   alt="Kamera görüntüsü"
                   className="max-w-full max-h-96 object-contain"
                   onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
