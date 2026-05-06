@@ -158,7 +158,7 @@ export default function DevicesPage() {
         ) : (
           <div className="space-y-2">
             <AnimatePresence initial={false}>
-              {(devices as Device[]).map((device, i) => (
+              {(devices as Device[]).filter(d => d && d.id).map((device, i) => (
                 <motion.div
                   key={device.id}
                   data-testid={`card-device-${device.id}`}

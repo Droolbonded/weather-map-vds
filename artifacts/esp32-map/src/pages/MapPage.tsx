@@ -186,10 +186,18 @@ export default function MapPage() {
   const markers = useMemo(() => {
     const now = Date.now();
     return (mapData as DeviceWithReading[]).filter(m => {
-      // Must be manually active and have a reading within the last 60 seconds
-      if (!m.device.isActive || !m.latestReading) return false;
+      // Safety check: ensure device and latestReading exist
+      if (!m?.device || !m?.latestReading) return false;
+      
+      // Must be manually active
+      if (!m.device.isActive) return false;
+      
+      // Relaxed check: hide only if no data for 10 minutes (600s)
+      // This prevents the map from becoming empty due to small delays
       const lastUpdate = new Date(m.latestReading.recordedAt).getTime();
-      return (now - lastUpdate) / 1000 < 60;
+      const diffSec = (now - lastUpdate) / 1000;
+      
+      return diffSec < 600; 
     });
   }, [mapData]);
   const hasActiveFire = useMemo(() => markers.some((m) => m.device.fireMode), [markers]);
